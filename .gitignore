@@ -24,3 +24,9 @@ Thumbs.db
 
 # Keep lib/ directory for source code!
 
+
+# API Server
+api_server/node_modules/
+api_server/*.db
+api_server/*.db-shm
+api_server/*.db-wal
