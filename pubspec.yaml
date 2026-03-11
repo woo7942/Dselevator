@@ -1,0 +1,30 @@
+name: elevator_manager
+description: 승강기 현장 관리 시스템 - 현장 및 승강기 관리, 검사/점검 이력 관리 앱
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  provider: 6.1.5+1
+  http: 1.5.0
+  shared_preferences: 2.5.3
+  intl: ^0.19.0
+  fl_chart: ^0.70.2
+  cached_network_image: ^3.4.1
+  table_calendar: ^3.1.2
+  file_picker: ^8.1.7
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icons/
