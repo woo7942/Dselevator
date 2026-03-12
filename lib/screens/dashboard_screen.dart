@@ -63,6 +63,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 16),
             _buildStatsRow(d),
             const SizedBox(height: 16),
+            _buildUpcomingInspections(d),
+            const SizedBox(height: 16),
             _buildRecentIssues(d),
           ],
         ),
@@ -339,8 +341,165 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildRecentIssues(DashboardData d) {
+  Widget _buildUpcomingInspections(DashboardData d) {
+    final list = d.upcomingInspectionList;
     return InfoCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            child: Row(
+              children: [
+                const Icon(Icons.event_note, size: 16, color: AppTheme.info),
+                const SizedBox(width: 6),
+                Text(
+                  '검사 일정 (30일 이내)',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.gray700),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: list.isEmpty ? AppTheme.gray100 : AppTheme.infoLight,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${list.length}건',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: list.isEmpty ? AppTheme.gray400 : AppTheme.info,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () {},
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('검사관리 →', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          if (list.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                '30일 이내 예정된 검사가 없습니다 ✓',
+                style: TextStyle(color: AppTheme.gray400, fontSize: 13),
+              ),
+            )
+          else
+            ...list.map((item) {
+              final m = item as Map<String, dynamic>;
+              final daysRemaining = (m['days_remaining'] as num?)?.toInt() ?? 0;
+              final isUrgent = daysRemaining <= 7;
+              final isWarning = daysRemaining <= 14;
+              final urgentColor = isUrgent
+                  ? AppTheme.danger
+                  : isWarning
+                      ? AppTheme.warning
+                      : AppTheme.info;
+              final urgentBg = isUrgent
+                  ? AppTheme.dangerLight
+                  : isWarning
+                      ? AppTheme.warningLight
+                      : AppTheme.infoLight;
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          decoration: BoxDecoration(
+                            color: urgentBg,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                daysRemaining == 0 ? 'D-Day' : 'D-$daysRemaining',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: urgentColor,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                m['site_name']?.toString() ?? '-',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.gray800,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (m['elevator_name'] != null)
+                                Text(
+                                  '${m['elevator_no'] ?? ''} ${m['elevator_name']}',
+                                  style: const TextStyle(fontSize: 11, color: AppTheme.gray400),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryLight,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                m['inspection_type']?.toString() ?? '-',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppTheme.primary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              fmtDate(m['next_inspection_date']?.toString()),
+                              style: const TextStyle(fontSize: 11, color: AppTheme.gray500),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                ],
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentIssues(DashboardData d) {    return InfoCard(
       padding: EdgeInsets.zero,
       child: Column(
         children: [

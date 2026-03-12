@@ -7,16 +7,18 @@ const os = require('os');
 const { execFile } = require('child_process');
 const multer = require('multer');
 
-// 파일 업로드 설정 (메모리 저장, 최대 20MB)
+// 파일 업로드 설정 (메모리 저장, 최대 20MB) - PDF 및 이미지 모두 허용
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'application/pdf' ||
-        file.originalname.toLowerCase().endsWith('.pdf')) {
+        file.originalname.toLowerCase().endsWith('.pdf') ||
+        file.mimetype.startsWith('image/') ||
+        /\.(jpg|jpeg|png|gif|bmp|webp|tiff?)$/i.test(file.originalname)) {
       cb(null, true);
     } else {
-      cb(new Error('PDF 파일만 업로드 가능합니다'));
+      cb(new Error('PDF 또는 이미지 파일만 업로드 가능합니다'));
     }
   }
 });
@@ -590,6 +592,70 @@ app.post('/api/pdf/parse', upload.single('pdf'), async (req, res) => {
     console.error('PDF 파싱 오류:', err);
     res.status(500).json({ success: false, error: `PDF 파싱 실패: ${err.message}` });
   }
+});
+
+// ── 이미지 파싱 엔드포인트 (캡처/스크린샷 기반) ─────────────────
+const IMAGE_PARSER_SCRIPT = path.join(__dirname, 'parse_image.py');
+
+app.post('/api/image/parse', upload.array('images', 10), async (req, res) => {
+  const files = req.files;
+  if (!files || files.length === 0) {
+    return res.status(400).json({ success: false, error: '이미지 파일이 없습니다' });
+  }
+
+  const allIssues = [];
+  let detectedSite = null;
+  let detectedDate = null;
+  let rawTextAll = '';
+  let errorCount = 0;
+
+  for (const file of files) {
+    let tempPath = null;
+    try {
+      const ext = path.extname(file.originalname) || '.png';
+      tempPath = path.join(os.tmpdir(), `img_${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`);
+      fs.writeFileSync(tempPath, file.buffer);
+
+      const result = await new Promise((resolve, reject) => {
+        execFile('python3', [IMAGE_PARSER_SCRIPT, tempPath], { timeout: 60000 }, (err, stdout, stderr) => {
+          if (tempPath) try { fs.unlinkSync(tempPath); } catch (_) {}
+          if (err) return reject(new Error(stderr || err.message));
+          try {
+            resolve(JSON.parse(stdout));
+          } catch (e) {
+            reject(new Error('파싱 결과 파싱 실패: ' + stdout.substring(0, 200)));
+          }
+        });
+      });
+
+      if (result.success) {
+        if (!detectedSite && result.detectedSite) detectedSite = result.detectedSite;
+        if (!detectedDate && result.detectedDate) detectedDate = result.detectedDate;
+        if (result.rawText) rawTextAll += result.rawText + '\n---\n';
+        for (const issue of (result.parsedIssues || [])) {
+          issue.sourceFile = file.originalname;
+          allIssues.push(issue);
+        }
+      } else {
+        errorCount++;
+      }
+    } catch (err) {
+      if (tempPath) try { fs.unlinkSync(tempPath); } catch (_) {}
+      errorCount++;
+      console.error('이미지 파싱 오류:', err);
+    }
+  }
+
+  return res.json({
+    success: true,
+    fileCount: files.length,
+    errorCount,
+    detectedSite,
+    detectedDate,
+    parsedIssues: allIssues,
+    totalCount: allIssues.length,
+    rawText: rawTextAll.substring(0, 3000),
+  });
 });
 
 // ── 서버 시작 ──────────────────────────────────────────────────

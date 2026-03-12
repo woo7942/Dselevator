@@ -242,6 +242,7 @@ class DashboardData {
   final Map<String, dynamic>? monthlyStats;
   final Map<String, dynamic>? quarterlyStats;
   final List<dynamic> recentIssues;
+  final List<dynamic> upcomingInspectionList;
 
   DashboardData({
     this.sites = 0,
@@ -251,6 +252,7 @@ class DashboardData {
     this.monthlyStats,
     this.quarterlyStats,
     this.recentIssues = const [],
+    this.upcomingInspectionList = const [],
   });
 
   factory DashboardData.fromJson(Map<String, dynamic> json) {
@@ -262,6 +264,7 @@ class DashboardData {
       monthlyStats: json['monthlyStats'] as Map<String, dynamic>?,
       quarterlyStats: json['quarterlyStats'] as Map<String, dynamic>?,
       recentIssues: json['recentIssues'] as List<dynamic>? ?? [],
+      upcomingInspectionList: json['upcomingInspectionList'] as List<dynamic>? ?? [],
     );
   }
 }

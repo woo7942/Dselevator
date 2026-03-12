@@ -1,5 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:js_interop';
+import 'package:web/web.dart' as web;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/site.dart';
@@ -248,13 +252,20 @@ class ApiService {
   }
 
   static Future<void> updateIssueAction(int id, {
-    required String status, String? actionTaken, String? actionDate, String? actionBy
+    required String status,
+    String? actionTaken,
+    String? actionDate,
+    String? actionBy,
+    String? photoBefore,
+    String? photoAfter,
   }) async {
     await _patch('/api/issues/$id/action', {
       'status': status,
       if (actionTaken != null) 'action_taken': actionTaken,
       if (actionDate != null) 'action_date': actionDate,
       if (actionBy != null) 'action_by': actionBy,
+      if (photoBefore != null) 'photo_before': photoBefore,
+      if (photoAfter != null) 'photo_after': photoAfter,
     });
   }
 
@@ -265,6 +276,130 @@ class ApiService {
   static Future<Map<String, dynamic>> createIssuesBulk(
       List<Map<String, dynamic>> issues) async {
     return await _post('/api/issues/bulk', {'issues': issues});
+  }
+
+  /// 파일 업로드 (이미지/동영상) - 파일 1개씩 순차 업로드
+  /// [onProgress]: (현재파일인덱스, 전체파일수, 0.0~1.0진행률) 콜백
+  static Future<List<String>> uploadFiles(
+    List<Uint8List> files,
+    List<String> filenames, {
+    void Function(int fileIndex, int total, double progress)? onProgress,
+  }) async {
+    final List<String> urls = [];
+    for (int i = 0; i < files.length; i++) {
+      final url = await _uploadOneXhr(
+        files[i],
+        filenames[i],
+        onProgress: onProgress == null ? null : (p) => onProgress(i, files.length, p),
+      );
+      urls.add(url);
+    }
+    return urls;
+  }
+
+  /// XHR 기반 단일 파일 업로드 (Web 전용, 실시간 진행률)
+  /// - Flutter Web에서 http.MultipartRequest는 동작 안 함 → XHR 필수
+  /// - 재시도 없음 (1회만 전송)
+  static Future<String> _uploadOneXhr(
+    Uint8List bytes,
+    String filename, {
+    void Function(double progress)? onProgress,
+  }) {
+    final completer = Completer<String>();
+    final uri = '$_baseUrl/api/upload';
+
+    // 파일 크기에 따른 타임아웃 (최소 120초, MB당 5초, 최대 600초)
+    final fileMB = bytes.length / (1024 * 1024);
+    final timeoutMs = ((120 + fileMB * 5).clamp(120, 600) * 1000).toInt();
+
+    final xhr = web.XMLHttpRequest();
+    xhr.open('POST', uri);
+    xhr.timeout = timeoutMs;
+
+    // ── 업로드 진행률 (전송 단계: 0% → 90%) ──
+    xhr.upload.addEventListener('progress', ((web.Event e) {
+      if (completer.isCompleted) return;
+      final pe = e as web.ProgressEvent;
+      if (pe.lengthComputable && pe.total > 0) {
+        final p = (pe.loaded / pe.total) * 0.9;
+        onProgress?.call(p);
+      }
+    }).toJS);
+
+    // ── 서버 응답 완료 (100%) ──
+    xhr.addEventListener('load', ((web.Event _) {
+      if (completer.isCompleted) return;
+      onProgress?.call(1.0);
+      try {
+        if (xhr.status == 200) {
+          final text = xhr.responseText;
+          final data = jsonDecode(text) as Map<String, dynamic>;
+          if (data['success'] == true) {
+            final list = data['urls'];
+            if (list is List && list.isNotEmpty) {
+              completer.complete(list.first.toString());
+            } else {
+              completer.completeError(Exception('서버에서 URL을 반환하지 않았습니다'));
+            }
+          } else {
+            completer.completeError(Exception(data['error']?.toString() ?? '업로드 오류'));
+          }
+        } else {
+          completer.completeError(Exception('업로드 실패 (HTTP ${xhr.status})'));
+        }
+      } catch (e) {
+        completer.completeError(Exception('응답 파싱 오류: $e'));
+      }
+    }).toJS);
+
+    // ── 네트워크 오류 ──
+    xhr.addEventListener('error', ((web.Event _) {
+      if (!completer.isCompleted) {
+        completer.completeError(Exception('네트워크 오류 - 연결을 확인해주세요'));
+      }
+    }).toJS);
+
+    // ── 타임아웃 ──
+    xhr.addEventListener('timeout', ((web.Event _) {
+      if (!completer.isCompleted) {
+        completer.completeError(Exception(
+          '업로드 타임아웃 (${fileMB.toStringAsFixed(1)}MB) - 네트워크가 느립니다'));
+      }
+    }).toJS);
+
+    // ── 취소 ──
+    xhr.addEventListener('abort', ((web.Event _) {
+      if (!completer.isCompleted) {
+        completer.completeError(Exception('업로드가 취소되었습니다'));
+      }
+    }).toJS);
+
+    // ── FormData 전송 ──
+    final formData = web.FormData();
+    final mime = _mimeType(filename);
+    final blob = web.Blob(
+      [bytes.toJS].toJS,
+      web.BlobPropertyBag(type: mime),
+    );
+    formData.append('files', blob, filename);
+    xhr.send(formData);
+
+    return completer.future;
+  }
+
+  static String _mimeType(String name) {
+    switch (name.toLowerCase().split('.').last) {
+      case 'jpg': case 'jpeg': return 'image/jpeg';
+      case 'png':  return 'image/png';
+      case 'gif':  return 'image/gif';
+      case 'webp': return 'image/webp';
+      case 'mp4':  return 'video/mp4';
+      case 'mov':  return 'video/quicktime';
+      case 'avi':  return 'video/x-msvideo';
+      case 'webm': return 'video/webm';
+      case '3gp':  return 'video/3gpp';
+      default:     return 'application/octet-stream';
+    }
   }
 
   // ── PDF 파싱 ──────────────────────────────────────────────
@@ -286,6 +421,27 @@ class ApiService {
     if (data['success'] != true) {
       throw Exception(data['error'] ?? 'PDF 파싱 오류');
     }
+    return data;
+  }
+
+  // ── 이미지(캡처) 파싱 ────────────────────────────────────────
+  static Future<Map<String, dynamic>> parseImages(
+      List<({Uint8List bytes, String filename})> images) async {
+    final uri = Uri.parse('$_baseUrl/api/image/parse');
+    final request = http.MultipartRequest('POST', uri);
+    for (final img in images) {
+      request.files.add(http.MultipartFile.fromBytes(
+        'images',
+        img.bytes,
+        filename: img.filename,
+      ));
+    }
+    final streamed = await request.send();
+    final res = await http.Response.fromStream(streamed);
+    if (res.statusCode != 200) {
+      throw Exception('이미지 파싱 실패 (${res.statusCode}): ${res.body}');
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
     return data;
   }
 

@@ -6,6 +6,7 @@ import '../widgets/common_widgets.dart';
 import '../services/api_service.dart';
 import '../models/inspection.dart';
 import '../models/site.dart';
+import 'issues_screen.dart' show IssueFormSheet;
 
 class InspectionsScreen extends StatefulWidget {
   const InspectionsScreen({super.key});
@@ -76,7 +77,7 @@ class _InspectionsScreenState extends State<InspectionsScreen>
 
   // 현재 포커스된 달의 검사 통계
   Map<String, int> _getMonthStats() {
-    final stats = {'합격': 0, '조건부합격': 0, '불합격': 0, '보류': 0, '전체': 0};
+    final stats = {'예정': 0, '합격': 0, '조건부합격': 0, '불합격': 0, '보류': 0, '전체': 0};
     for (final ins in _inspections) {
       try {
         final d = DateTime.parse(ins.inspectionDate);
@@ -113,19 +114,25 @@ class _InspectionsScreenState extends State<InspectionsScreen>
             tooltip: '문자로 등록',
             onPressed: _openSmsParser,
           ),
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
-          IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppTheme.primaryLight,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.add, color: AppTheme.primary, size: 18),
-            ),
-            onPressed: () => _openForm(null),
+          TextButton.icon(
+            onPressed: _load,
+            icon: const Icon(Icons.refresh, size: 15),
+            label: const Text('새로고침', style: TextStyle(fontSize: 12)),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.gray600),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 2),
+          TextButton.icon(
+            onPressed: () => _openForm(null),
+            icon: const Icon(Icons.add, size: 15),
+            label: const Text('검사 등록', style: TextStyle(fontSize: 12)),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white,
+              backgroundColor: AppTheme.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+          const SizedBox(width: 8),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(44),
@@ -192,9 +199,9 @@ class _InspectionsScreenState extends State<InspectionsScreen>
             children: [
               _statChip('전체', stats['전체'] ?? 0, AppTheme.gray500),
               const SizedBox(width: 6),
-              _statChip('합격', stats['합격'] ?? 0, AppTheme.success),
+              _statChip('예정', stats['예정'] ?? 0, AppTheme.info),
               const SizedBox(width: 6),
-              _statChip('조건부', stats['조건부합격'] ?? 0, AppTheme.warning),
+              _statChip('합격', stats['합격'] ?? 0, AppTheme.success),
               const SizedBox(width: 6),
               _statChip('불합격', stats['불합격'] ?? 0, AppTheme.danger),
               const Spacer(),
@@ -543,14 +550,26 @@ class _InspectionsScreenState extends State<InspectionsScreen>
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: resultColor.withValues(alpha: 0.12),
+                          color: resultColor.withValues(alpha: ins.result == '예정' ? 0.08 : 0.12),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: resultColor.withValues(alpha: 0.3)),
+                          border: Border.all(
+                            color: resultColor.withValues(alpha: ins.result == '예정' ? 0.5 : 0.3),
+                            width: ins.result == '예정' ? 1.2 : 1,
+                          ),
                         ),
-                        child: Text(ins.result,
-                          style: TextStyle(
-                            fontSize: 11, color: resultColor,
-                            fontWeight: FontWeight.bold)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (ins.result == '예정') ...[
+                              Icon(Icons.schedule, size: 10, color: resultColor),
+                              const SizedBox(width: 3),
+                            ],
+                            Text(ins.result,
+                              style: TextStyle(
+                                fontSize: 11, color: resultColor,
+                                fontWeight: FontWeight.bold)),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Row(
@@ -633,7 +652,8 @@ class _InspectionsScreenState extends State<InspectionsScreen>
       case '합격': return AppTheme.success;
       case '불합격': return AppTheme.danger;
       case '조건부합격': return AppTheme.warning;
-      default: return AppTheme.info;
+      case '예정': return AppTheme.info;
+      default: return AppTheme.gray400;
     }
   }
 
@@ -774,10 +794,19 @@ class _InspectionsScreenState extends State<InspectionsScreen>
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: resultColor.withValues(alpha: 0.25)),
                         ),
-                        child: Text(ins.result,
-                          style: TextStyle(
-                            fontSize: 10, color: resultColor,
-                            fontWeight: FontWeight.bold)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (ins.result == '예정') ...[
+                              Icon(Icons.schedule, size: 9, color: resultColor),
+                              const SizedBox(width: 2),
+                            ],
+                            Text(ins.result,
+                              style: TextStyle(
+                                fontSize: 10, color: resultColor,
+                                fontWeight: FontWeight.bold)),
+                          ],
+                        ),
                       ),
                     ]),
                     const SizedBox(height: 4),
@@ -887,7 +916,9 @@ class _InspectionDetailSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final resultColor = ins.result == '합격' ? AppTheme.success
         : ins.result == '불합격' ? AppTheme.danger
-        : ins.result == '조건부합격' ? AppTheme.warning : AppTheme.info;
+        : ins.result == '조건부합격' ? AppTheme.warning
+        : ins.result == '예정' ? AppTheme.info
+        : AppTheme.gray400;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -937,8 +968,17 @@ class _InspectionDetailSheet extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: resultColor.withValues(alpha: 0.3)),
               ),
-              child: Text(ins.result,
-                style: TextStyle(color: resultColor, fontWeight: FontWeight.bold)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (ins.result == '예정') ...[
+                    Icon(Icons.schedule, size: 13, color: resultColor),
+                    const SizedBox(width: 4),
+                  ],
+                  Text(ins.result,
+                    style: TextStyle(color: resultColor, fontWeight: FontWeight.bold)),
+                ],
+              ),
             ),
           ]),
           const Divider(height: 24),
@@ -1310,31 +1350,19 @@ class _SmsParserSheetState extends State<SmsParserSheet> {
                         style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
                           color: AppTheme.gray600)),
                       const SizedBox(height: 6),
-                      _loadingSites
-                          ? const Center(child: CircularProgressIndicator())
-                          : DropdownButtonFormField<Site>(
-                              value: _selectedSite,
-                              decoration: InputDecoration(
-                                prefixIcon: const Icon(Icons.business_outlined, size: 18),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 8),
-                              ),
-                              hint: const Text('현장 선택'),
-                              items: _sites.map((s) => DropdownMenuItem(
-                                value: s,
-                                child: Text(s.siteName, overflow: TextOverflow.ellipsis),
-                              )).toList(),
-                              onChanged: (s) {
-                                setState(() {
-                                  _selectedSite = s;
-                                  _elevators = [];
-                                  _selectedElevator = null;
-                                });
-                                if (s?.id != null) _loadElevators(s!.id!);
-                              },
-                            ),
+                      SiteSearchField(
+                        sites: _sites,
+                        selected: _selectedSite,
+                        isLoading: _loadingSites,
+                        onChanged: (s) {
+                          setState(() {
+                            _selectedSite = s;
+                            _elevators = [];
+                            _selectedElevator = null;
+                          });
+                          if (s?.id != null) _loadElevators(s!.id!);
+                        },
+                      ),
 
                       if (_elevators.isNotEmpty) ...[
                         const SizedBox(height: 10),
@@ -1492,7 +1520,27 @@ class _InspectionFormSheetState extends State<InspectionFormSheet> {
   late final _reportCtrl = TextEditingController(text: widget.inspection?.reportNo);
   late final _notesCtrl = TextEditingController(text: widget.inspection?.notes);
   late String _type = widget.inspection?.inspectionType ?? '정기검사';
-  late String _result = widget.inspection?.result ?? '합격';
+  // result는 검사일 기준으로 자동 결정 (미래=예정, 과거=사용자 선택)
+  // 기존 검사 수정 시: '예정'이 아니면 그 값 유지, '예정'이면 날짜 다시 체크
+  late String _result = _initResult();
+
+  String _initResult() {
+    final existing = widget.inspection?.result;
+    if (existing != null && existing != '예정') return existing; // 이미 결과 있으면 유지
+    return '예정'; // 새 등록 or 기존 예정 → 날짜에 따라 _isPast()로 판단
+  }
+
+  /// 검사일이 오늘 이전(과거/오늘)이면 true → 결과 입력 가능
+  bool _isPast() {
+    final txt = _dateCtrl.text.trim();
+    if (txt.isEmpty) return false;
+    final d = DateTime.tryParse(txt);
+    if (d == null) return false;
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final dateOnly = DateTime(d.year, d.month, d.day);
+    return !dateOnly.isAfter(todayOnly);
+  }
 
   List<Site> _sites = [];
   Site? _selectedSite;
@@ -1582,25 +1630,26 @@ class _InspectionFormSheetState extends State<InspectionFormSheet> {
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
-                      DropdownButtonFormField<Site>(
-                        value: _selectedSite,
-                        decoration: const InputDecoration(
-                          labelText: '현장 *',
-                          prefixIcon: Icon(Icons.business_outlined, size: 18)),
-                        hint: const Text('현장 선택'),
-                        items: _sites.map((s) => DropdownMenuItem(
-                          value: s,
-                          child: Text(s.siteName, overflow: TextOverflow.ellipsis),
-                        )).toList(),
-                        validator: (v) => v == null ? '현장을 선택하세요' : null,
-                        onChanged: (s) {
-                          setState(() {
-                            _selectedSite = s;
-                            _elevators = [];
-                            _selectedElevator = null;
-                          });
-                          if (s?.id != null) _loadElevators(s!.id!);
-                        },
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('현장 *',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                              color: AppTheme.gray600)),
+                          const SizedBox(height: 6),
+                          SiteSearchField(
+                            sites: _sites,
+                            selected: _selectedSite,
+                            onChanged: (s) {
+                              setState(() {
+                                _selectedSite = s;
+                                _elevators = [];
+                                _selectedElevator = null;
+                              });
+                              if (s?.id != null) _loadElevators(s!.id!);
+                            },
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 8),
                       if (_elevators.isNotEmpty)
@@ -1630,19 +1679,12 @@ class _InspectionFormSheetState extends State<InspectionFormSheet> {
                         onChanged: (v) => setState(() => _type = v ?? '정기검사'),
                       ),
                       const SizedBox(height: 8),
-                      _dateField(_dateCtrl, '검사일 *', required: true),
+                      // 검사일 선택 → 날짜에 따라 결과 자동 처리
+                      _dateFieldWithAutoResult(_dateCtrl, '검사일 *', required: true),
                       _dateField(_nextDateCtrl, '다음 검사 예정일'),
-                      DropdownButtonFormField<String>(
-                        value: _result,
-                        decoration: const InputDecoration(labelText: '검사 결과'),
-                        items: const [
-                          DropdownMenuItem(value: '합격', child: Text('합격')),
-                          DropdownMenuItem(value: '조건부합격', child: Text('조건부합격')),
-                          DropdownMenuItem(value: '불합격', child: Text('불합격')),
-                          DropdownMenuItem(value: '보류', child: Text('보류')),
-                        ],
-                        onChanged: (v) => setState(() => _result = v ?? '합격'),
-                      ),
+                      // 검사일이 오늘 이전이면 결과 입력 UI 표시
+                      if (_isPast()) ..._buildResultSection()
+                      else _buildScheduledBadge(),
                       const SizedBox(height: 8),
                       _field(_inspectorCtrl, '검사자'),
                       _field(_agencyCtrl, '검사기관'),
@@ -1724,6 +1766,168 @@ class _InspectionFormSheetState extends State<InspectionFormSheet> {
     );
   }
 
+  // 날짜 선택 + 결과 상태 자동 갱신
+  Widget _dateFieldWithAutoResult(TextEditingController ctrl, String label,
+      {bool required = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: TextFormField(
+        controller: ctrl,
+        readOnly: true,
+        decoration: InputDecoration(
+          labelText: label,
+          suffixIcon: const Icon(Icons.calendar_today, size: 18),
+        ),
+        validator: required
+            ? (v) => (v?.isEmpty ?? true) ? '필수 항목입니다' : null
+            : null,
+        onTap: () async {
+          final picked = await showDatePicker(
+            context: context,
+            initialDate: ctrl.text.isNotEmpty
+                ? DateTime.tryParse(ctrl.text) ?? DateTime.now()
+                : DateTime.now(),
+            firstDate: DateTime(2010),
+            lastDate: DateTime(2035),
+          );
+          if (picked != null) {
+            ctrl.text = DateFormat('yyyy-MM-dd').format(picked);
+            // 날짜 변경 시 result 초기화: 과거 → 기존값 유지 or '합격', 미래 → '예정'
+            setState(() {
+              final wasPast = _isPast();
+              if (!wasPast) {
+                _result = '예정';
+              } else if (_result == '예정') {
+                _result = '합격'; // 과거 날짜 선택 시 기본 결과
+              }
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  // 결과 입력 섹션 (검사일이 오늘 이전일 때만 표시)
+  List<Widget> _buildResultSection() {
+    return [
+      const SizedBox(height: 4),
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.gray50,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.gray200),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.assignment_turned_in_outlined,
+                    size: 14, color: AppTheme.gray500),
+                const SizedBox(width: 6),
+                const Text(
+                  '검사 결과',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.gray600),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _resultOption('합격', AppTheme.success),
+                const SizedBox(width: 8),
+                _resultOption('조건부합격', AppTheme.warning),
+                const SizedBox(width: 8),
+                _resultOption('불합격', AppTheme.danger),
+                const SizedBox(width: 8),
+                _resultOption('보류', AppTheme.gray500),
+              ],
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 8),
+    ];
+  }
+
+  Widget _resultOption(String value, Color color) {
+    final selected = _result == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _result = value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? color.withValues(alpha: 0.12) : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected ? color : AppTheme.gray200,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              color: selected ? color : AppTheme.gray500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 예정 상태 배지 (미래 날짜일 때 표시)
+  Widget _buildScheduledBadge() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.info.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.info.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.schedule, size: 16, color: AppTheme.info),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                '검사일이 되면 결과를 입력할 수 있습니다',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.info,
+                    fontWeight: FontWeight.w500),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.info,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                '예정',
+                style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedSite == null) {
@@ -1734,6 +1938,8 @@ class _InspectionFormSheetState extends State<InspectionFormSheet> {
     try {
       final elevId = _selectedElevator?.id
           ?? (_elevators.isNotEmpty ? _elevators.first.id! : 0);
+      // 검사일 기준으로 최종 result 결정
+      final finalResult = _isPast() ? _result : '예정';
       final inspection = Inspection(
         id: widget.inspection?.id,
         elevatorId: elevId,
@@ -1746,15 +1952,91 @@ class _InspectionFormSheetState extends State<InspectionFormSheet> {
             _inspectorCtrl.text.isNotEmpty ? _inspectorCtrl.text : null,
         inspectionAgency:
             _agencyCtrl.text.isNotEmpty ? _agencyCtrl.text : null,
-        result: _result,
+        result: finalResult,
         reportNo: _reportCtrl.text.isNotEmpty ? _reportCtrl.text : null,
         notes: _notesCtrl.text.isNotEmpty ? _notesCtrl.text : null,
       );
+      int inspectionId;
       if (widget.inspection == null) {
-        await ApiService.createInspection(inspection);
+        inspectionId = await ApiService.createInspection(inspection);
       } else {
         await ApiService.updateInspection(widget.inspection!.id!, inspection);
+        inspectionId = widget.inspection!.id!;
       }
+
+      // 조건부합격 또는 불합격 시 → 지적사항 자동 등록 다이얼로그
+      if (mounted && (finalResult == '조건부합격' || finalResult == '불합격')) {
+        setState(() => _saving = false);
+        final shouldAddIssue = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: finalResult == '불합격' ? AppTheme.dangerLight : AppTheme.warningLight,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.warning_amber_rounded,
+                    color: finalResult == '불합격' ? AppTheme.danger : AppTheme.warning,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '지적사항 등록',
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: Text(
+              '검사 결과가 [$finalResult]입니다.\n지적사항 탭에 자동으로 등록하시겠습니까?',
+              style: const TextStyle(fontSize: 13, color: AppTheme.gray600),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('건너뛰기'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                child: const Text('지적사항 등록', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        );
+
+        if (shouldAddIssue == true && mounted) {
+          // 지적사항 등록 폼 열기 (검사 정보 자동 연동)
+          await showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+            builder: (_) => IssueFormSheet(
+              issue: null,
+              presetInspectionId: inspectionId,
+              presetSiteId: _selectedSite!.id!,
+              presetElevatorId: elevId,
+              presetInspectionDate: _dateCtrl.text,
+              presetInspectorName: _inspectorCtrl.text.isNotEmpty ? _inspectorCtrl.text : null,
+              presetInspectionType: _type,
+              presetResult: finalResult,
+            ),
+          );
+        }
+      }
+
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) showToast(context, e.toString(), isError: true);

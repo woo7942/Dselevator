@@ -54,11 +54,25 @@ class _SitesScreenState extends State<SitesScreen> {
       appBar: AppBar(
         title: const Text('현장 관리'),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _openSiteForm(null),
+          TextButton.icon(
+            onPressed: _load,
+            icon: const Icon(Icons.refresh, size: 15),
+            label: const Text('새로고침', style: TextStyle(fontSize: 12)),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.gray600),
           ),
+          const SizedBox(width: 2),
+          TextButton.icon(
+            onPressed: () => _openSiteForm(null),
+            icon: const Icon(Icons.add, size: 15),
+            label: const Text('현장 등록', style: TextStyle(fontSize: 12)),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white,
+              backgroundColor: AppTheme.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(
@@ -570,6 +584,7 @@ class _SiteDetailScreenState extends State<SiteDetailScreen> {
 }
 
 // ── 현장 폼 시트 ───────────────────────────────────────────
+// ── 현장 + 호기 통합 등록 폼 ─────────────────────────────────────────
 class SiteFormSheet extends StatefulWidget {
   final Site? site;
   const SiteFormSheet({super.key, this.site});
@@ -578,9 +593,41 @@ class SiteFormSheet extends StatefulWidget {
   State<SiteFormSheet> createState() => _SiteFormSheetState();
 }
 
+// 호기 입력 데이터 모델
+class _ElevatorEntry {
+  final TextEditingController noCtrl;
+  final TextEditingController nameCtrl;
+  final TextEditingController mfrCtrl;
+  final TextEditingController floorsCtrl;
+  final TextEditingController capCtrl;
+  String type;
+  String status;
+
+  _ElevatorEntry({
+    String no = '',
+    String name = '',
+    String type = '승객용',
+    String status = 'normal',
+  })  : noCtrl = TextEditingController(text: no),
+        nameCtrl = TextEditingController(text: name),
+        mfrCtrl = TextEditingController(),
+        floorsCtrl = TextEditingController(),
+        capCtrl = TextEditingController(),
+        type = type,
+        status = status;
+
+  void dispose() {
+    noCtrl.dispose();
+    nameCtrl.dispose();
+    mfrCtrl.dispose();
+    floorsCtrl.dispose();
+    capCtrl.dispose();
+  }
+}
+
 class _SiteFormSheetState extends State<SiteFormSheet> {
   final _formKey = GlobalKey<FormState>();
-  late final _codeCtrl = TextEditingController(text: widget.site?.siteCode);
+  // 현장 정보
   late final _nameCtrl = TextEditingController(text: widget.site?.siteName);
   late final _addrCtrl = TextEditingController(text: widget.site?.address);
   late final _ownerCtrl = TextEditingController(text: widget.site?.ownerName);
@@ -588,14 +635,63 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
   late final _mgCtrl = TextEditingController(text: widget.site?.managerName);
   late final _notesCtrl = TextEditingController(text: widget.site?.notes);
   late String _status = widget.site?.status ?? 'active';
+
+  // 호기 목록 (신규 등록 시만 표시)
+  final List<_ElevatorEntry> _elevators = [];
+  bool _showElevators = true; // 호기 섹션 접기/펼치기
+
   bool _saving = false;
+
+  final _elevTypes = ['승객용', '화물용', '비상용', '장애인용', '소형화물용', '에스컬레이터', '무빙워크'];
+  final _elevStatuses = ['normal', 'warning', 'fault', 'stopped'];
+  final _elevStatusLabels = {'normal': '정상', 'warning': '주의', 'fault': '고장', 'stopped': '정지'};
+
+  bool get _isNew => widget.site == null;
+
+  @override
+  void initState() {
+    super.initState();
+    // 신규 등록 시 기본 호기 1개 자동 추가
+    if (_isNew) {
+      _elevators.add(_ElevatorEntry(no: '1', name: '1호기'));
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _addrCtrl.dispose();
+    _ownerCtrl.dispose();
+    _phoneCtrl.dispose();
+    _mgCtrl.dispose();
+    _notesCtrl.dispose();
+    for (final e in _elevators) {
+      e.dispose();
+    }
+    super.dispose();
+  }
+
+  void _addElevator() {
+    setState(() {
+      final idx = _elevators.length + 1;
+      _elevators.add(_ElevatorEntry(no: '$idx', name: '${idx}호기'));
+    });
+  }
+
+  void _removeElevator(int index) {
+    setState(() {
+      _elevators[index].dispose();
+      _elevators.removeAt(index);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.92),
         padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
@@ -603,19 +699,31 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              // ── 헤더 ──
               Row(
                 children: [
-                  Text(widget.site == null ? '현장 등록' : '현장 수정',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  Icon(Icons.business, color: theme.colorScheme.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    _isNew ? '현장 등록' : '현장 수정',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
                   const Spacer(),
-                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
                 ],
               ),
               const Divider(),
               Flexible(
                 child: SingleChildScrollView(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // ── 현장 정보 섹션 ──
+                      _sectionHeader(Icons.location_on_outlined, '현장 정보', theme),
+                      const SizedBox(height: 8),
                       _field(_nameCtrl, '현장명 *', required: true),
                       _field(_addrCtrl, '주소 *', required: true),
                       Row(
@@ -627,7 +735,7 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
                       ),
                       _field(_mgCtrl, '담당자'),
                       DropdownButtonFormField<String>(
-                        value: _status,
+                        initialValue: _status,
                         decoration: const InputDecoration(labelText: '상태'),
                         items: const [
                           DropdownMenuItem(value: 'active', child: Text('운영중')),
@@ -638,6 +746,83 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
                       ),
                       const SizedBox(height: 8),
                       _field(_notesCtrl, '비고', maxLines: 2),
+
+                      // ── 호기 섹션 (신규 등록 시만) ──
+                      if (_isNew) ...[
+                        const SizedBox(height: 16),
+                        // 호기 섹션 헤더 (접기/펼치기)
+                        InkWell(
+                          onTap: () => setState(() => _showElevators = !_showElevators),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.elevator, color: theme.colorScheme.primary, size: 18),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '호기 등록',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.primary,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '${_elevators.length}대',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  '현장 등록 후 함께 등록됩니다',
+                                  style: TextStyle(fontSize: 10, color: AppTheme.gray500),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  _showElevators ? Icons.expand_less : Icons.expand_more,
+                                  color: theme.colorScheme.primary,
+                                  size: 18,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        if (_showElevators) ...[
+                          const SizedBox(height: 8),
+                          // 호기 카드 목록
+                          ...List.generate(_elevators.length, (i) => _buildElevatorCard(i, theme)),
+                          // 호기 추가 버튼
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: _addElevator,
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('호기 추가', style: TextStyle(fontSize: 13)),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 40),
+                              side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.4)),
+                              foregroundColor: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ],
+                      const SizedBox(height: 8),
                     ],
                   ),
                 ),
@@ -647,9 +832,30 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: _saving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 46),
+                  ),
                   child: _saving
-                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : Text(widget.site == null ? '등록' : '수정'),
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(_isNew ? Icons.check : Icons.save, size: 18),
+                            const SizedBox(width: 8),
+                            Text(
+                              _isNew
+                                  ? (_elevators.isNotEmpty
+                                      ? '현장 + 호기 ${_elevators.length}대 등록'
+                                      : '현장 등록')
+                                  : '수정 저장',
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
                 ),
               ),
             ],
@@ -659,14 +865,170 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
     );
   }
 
-  Widget _field(TextEditingController ctrl, String label, {bool required = false, int maxLines = 1}) {
+  Widget _sectionHeader(IconData icon, String title, ThemeData theme) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: AppTheme.gray500),
+        const SizedBox(width: 6),
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.gray500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildElevatorCard(int i, ThemeData theme) {
+    final e = _elevators[i];
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.gray50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.gray200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 카드 헤더
+          Row(
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '${i + 1}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${i + 1}호기',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              // 삭제 버튼
+              if (_elevators.isNotEmpty)
+                InkWell(
+                  onTap: () => _removeElevator(i),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.close, size: 16, color: AppTheme.gray400),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // 호기번호 + 명칭
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: _elevField(e.noCtrl, '호기번호 *', required: true),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 3,
+                child: _elevField(e.nameCtrl, '명칭 (예: A동 1호기)'),
+              ),
+            ],
+          ),
+          // 종류 + 상태
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: e.type,
+                  isDense: true,
+                  decoration: const InputDecoration(
+                    labelText: '종류',
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    isDense: true,
+                  ),
+                  items: _elevTypes
+                      .map((t) => DropdownMenuItem(value: t, child: Text(t, style: const TextStyle(fontSize: 12))))
+                      .toList(),
+                  onChanged: (v) => setState(() => e.type = v ?? '승객용'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: e.status,
+                  isDense: true,
+                  decoration: const InputDecoration(
+                    labelText: '상태',
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    isDense: true,
+                  ),
+                  items: _elevStatuses
+                      .map((s) => DropdownMenuItem(
+                            value: s,
+                            child: Text(_elevStatusLabels[s] ?? s, style: const TextStyle(fontSize: 12)),
+                          ))
+                      .toList(),
+                  onChanged: (v) => setState(() => e.status = v ?? 'normal'),
+                ),
+              ),
+            ],
+          ),
+          // 제조사 + 운행층 (선택)
+          Row(
+            children: [
+              Expanded(child: _elevField(e.mfrCtrl, '제조사')),
+              const SizedBox(width: 8),
+              Expanded(child: _elevField(e.floorsCtrl, '운행층')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _field(TextEditingController ctrl, String label,
+      {bool required = false, int maxLines = 1}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: TextFormField(
         controller: ctrl,
         decoration: InputDecoration(labelText: label),
         maxLines: maxLines,
-        validator: required ? (v) => (v?.isEmpty ?? true) ? '필수 항목입니다' : null : null,
+        validator:
+            required ? (v) => (v?.isEmpty ?? true) ? '필수 항목입니다' : null : null,
+      ),
+    );
+  }
+
+  Widget _elevField(TextEditingController ctrl, String label,
+      {bool required = false, bool number = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: TextFormField(
+        controller: ctrl,
+        decoration: InputDecoration(
+          labelText: label,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          isDense: true,
+        ),
+        style: const TextStyle(fontSize: 12),
+        keyboardType: number ? TextInputType.number : TextInputType.text,
+        validator:
+            required ? (v) => (v?.isEmpty ?? true) ? '필수' : null : null,
       ),
     );
   }
@@ -677,35 +1039,70 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
     try {
       final site = Site(
         id: widget.site?.id,
-        siteCode: widget.site?.siteCode ?? 'S-${DateTime.now().millisecondsSinceEpoch}',
-        siteName: _nameCtrl.text,
-        address: _addrCtrl.text,
-        ownerName: _ownerCtrl.text.isNotEmpty ? _ownerCtrl.text : null,
-        ownerPhone: _phoneCtrl.text.isNotEmpty ? _phoneCtrl.text : null,
-        managerName: _mgCtrl.text.isNotEmpty ? _mgCtrl.text : null,
+        siteCode: widget.site?.siteCode ??
+            'S-${DateTime.now().millisecondsSinceEpoch}',
+        siteName: _nameCtrl.text.trim(),
+        address: _addrCtrl.text.trim(),
+        ownerName:
+            _ownerCtrl.text.isNotEmpty ? _ownerCtrl.text.trim() : null,
+        ownerPhone:
+            _phoneCtrl.text.isNotEmpty ? _phoneCtrl.text.trim() : null,
+        managerName: _mgCtrl.text.isNotEmpty ? _mgCtrl.text.trim() : null,
         status: _status,
-        notes: _notesCtrl.text.isNotEmpty ? _notesCtrl.text : null,
+        notes: _notesCtrl.text.isNotEmpty ? _notesCtrl.text.trim() : null,
       );
-      if (widget.site == null) {
-        await ApiService.createSite(site);
+
+      if (_isNew) {
+        // 현장 생성
+        final newSiteId = await ApiService.createSite(site);
+        // 호기 일괄 등록
+        int successCount = 0;
+        for (final e in _elevators) {
+          if (e.noCtrl.text.trim().isEmpty) continue;
+          try {
+            final elevator = Elevator(
+              siteId: newSiteId,
+              elevatorNo: e.noCtrl.text.trim(),
+              elevatorName:
+                  e.nameCtrl.text.isNotEmpty ? e.nameCtrl.text.trim() : null,
+              elevatorType: e.type,
+              manufacturer:
+                  e.mfrCtrl.text.isNotEmpty ? e.mfrCtrl.text.trim() : null,
+              floorsServed: e.floorsCtrl.text.isNotEmpty
+                  ? e.floorsCtrl.text.trim()
+                  : null,
+              capacity: int.tryParse(e.capCtrl.text),
+              status: e.status,
+            );
+            await ApiService.createElevator(newSiteId, elevator);
+            successCount++;
+          } catch (_) {
+            // 개별 호기 실패는 무시하고 계속 진행
+          }
+        }
+        if (mounted) {
+          if (successCount > 0) {
+            showToast(context,
+                '현장 등록 완료! 호기 ${successCount}대가 함께 등록되었습니다.');
+          } else if (_elevators.isNotEmpty) {
+            showToast(context, '현장은 등록되었으나 호기 등록에 실패했습니다.',
+                isError: true);
+          }
+          Navigator.pop(context, true);
+        }
       } else {
+        // 현장 수정만
         await ApiService.updateSite(widget.site!.id!, site);
+        if (mounted) Navigator.pop(context, true);
       }
-      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) showToast(context, e.toString(), isError: true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
-
-  @override
-  void dispose() {
-    _codeCtrl.dispose(); _nameCtrl.dispose(); _addrCtrl.dispose();
-    _ownerCtrl.dispose(); _phoneCtrl.dispose(); _mgCtrl.dispose(); _notesCtrl.dispose();
-    super.dispose();
-  }
 }
+
 
 // ── 승강기 폼 시트 ─────────────────────────────────────────
 class ElevatorFormSheet extends StatefulWidget {
@@ -780,7 +1177,7 @@ class _ElevatorFormSheetState extends State<ElevatorFormSheet> {
                           Expanded(child: _field(_capCtrl, '정원(명)', number: true)),
                           const SizedBox(width: 8),
                           Expanded(child: DropdownButtonFormField<String>(
-                            value: _status,
+                            initialValue: _status,
                             decoration: const InputDecoration(labelText: '상태'),
                             items: _statuses.map((s) => DropdownMenuItem(
                               value: s,

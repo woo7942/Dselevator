@@ -1,5 +1,6 @@
-package com.elevatormanager.elevator_manager
+package com.elevatormanager.elevators
 
 import io.flutter.embedding.android.FlutterActivity
 
 class MainActivity : FlutterActivity()
+

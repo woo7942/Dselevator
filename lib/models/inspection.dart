@@ -8,7 +8,7 @@ class Inspection {
   final String? nextInspectionDate;
   final String? inspectorName;
   final String? inspectionAgency;
-  final String result;
+  final String result; // '예정', '합격', '조건부합격', '불합격', '보류'
   final String? reportNo;
   final String? notes;
   final String? createdAt;
@@ -25,7 +25,7 @@ class Inspection {
     this.nextInspectionDate,
     this.inspectorName,
     this.inspectionAgency,
-    this.result = '합격',
+    this.result = '예정',
     this.reportNo,
     this.notes,
     this.createdAt,
@@ -94,10 +94,12 @@ class InspectionIssue {
   final String? inspectionDate;
   final String? inspectorName;
   final String? createdAt;
+  final String? comment;       // 코멘트
+  final String? mediaUrls;     // JSON 배열 문자열로 저장된 파일 URL 목록
+  final String? elevatorNo;    // 호기번호 (join용)
   // Join fields
   final String? siteName;
   final String? elevatorName;
-  final String? elevatorNo;
   final String? inspectionType;
   final String? inspDate;
 
@@ -122,12 +124,28 @@ class InspectionIssue {
     this.inspectionDate,
     this.inspectorName,
     this.createdAt,
+    this.comment,
+    this.mediaUrls,
+    this.elevatorNo,
     this.siteName,
     this.elevatorName,
-    this.elevatorNo,
     this.inspectionType,
     this.inspDate,
   });
+
+  /// mediaUrls JSON 문자열을 List<String>으로 파싱
+  List<String> get mediaList {
+    if (mediaUrls == null || mediaUrls!.isEmpty) return [];
+    try {
+      final decoded = (mediaUrls!.startsWith('['))
+          ? (mediaUrls!.replaceAll('[', '').replaceAll(']', '').replaceAll('"', '').split(','))
+              .map((e) => e.trim()).where((e) => e.isNotEmpty).toList()
+          : <String>[];
+      return decoded;
+    } catch (_) {
+      return [];
+    }
+  }
 
   factory InspectionIssue.fromJson(Map<String, dynamic> json) {
     return InspectionIssue(
@@ -151,9 +169,11 @@ class InspectionIssue {
       inspectionDate: json['inspection_date'] as String?,
       inspectorName: json['inspector_name'] as String?,
       createdAt: json['created_at'] as String?,
+      comment: json['comment'] as String?,
+      mediaUrls: json['media_urls'] as String?,
+      elevatorNo: json['elevator_no'] as String?,
       siteName: json['site_name'] as String?,
       elevatorName: json['elevator_name'] as String?,
-      elevatorNo: json['elevator_no'] as String?,
       inspectionType: json['inspection_type'] as String?,
       inspDate: json['insp_date'] as String?,
     );
@@ -178,6 +198,9 @@ class InspectionIssue {
       if (deadline != null) 'deadline': deadline,
       if (inspectionDate != null) 'inspection_date': inspectionDate,
       if (inspectorName != null) 'inspector_name': inspectorName,
+      if (comment != null) 'comment': comment,
+      if (mediaUrls != null) 'media_urls': mediaUrls,
+      if (elevatorNo != null) 'elevator_no': elevatorNo,
     };
   }
 }

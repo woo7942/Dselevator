@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/theme.dart';
+import '../models/site.dart';
 
 class StatusBadge extends StatelessWidget {
   final String status;
@@ -277,3 +278,295 @@ void showToast(BuildContext context, String message, {bool isError = false}) {
 }
 
 String fmtDate(String? d) => d != null && d.length >= 10 ? d.substring(0, 10) : '-';
+
+// ══════════════════════════════════════════════════════
+// 검색 가능한 현장 선택 위젯
+// ══════════════════════════════════════════════════════
+
+/// 검색 가능한 현장 선택 다이얼로그 + 필드
+/// 사용법:
+///   SiteSearchField(
+///     sites: _sites,
+///     selected: _selectedSite,
+///     onChanged: (s) => setState(() => _selectedSite = s),
+///   )
+class SiteSearchField extends StatelessWidget {
+  final List<Site> sites;
+  final Site? selected;
+  final void Function(Site?) onChanged;
+  final String label;
+  final bool required;
+  final bool isLoading;
+
+  const SiteSearchField({
+    super.key,
+    required this.sites,
+    required this.selected,
+    required this.onChanged,
+    this.label = '현장 선택',
+    this.required = false,
+    this.isLoading = false,
+  });
+
+  Future<void> _showSearchDialog(BuildContext context) async {
+    final result = await showDialog<_SiteSearchResult?>(
+      context: context,
+      builder: (ctx) => _SiteSearchDialog(sites: sites, selected: selected),
+    );
+    if (result != null) {
+      onChanged(result.site);
+    }
+    // result == null이면 다이얼로그 X 버튼으로 닫은 것 → 변경 없음
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const SizedBox(
+        height: 48,
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () => _showSearchDialog(context),
+      child: Container(
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected != null ? AppTheme.primary : AppTheme.gray300,
+            width: selected != null ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.business_outlined,
+              size: 18,
+              color: selected != null ? AppTheme.primary : AppTheme.gray400,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                selected?.siteName ?? label,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: selected != null ? AppTheme.gray800 : AppTheme.gray400,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Icon(
+              Icons.search,
+              size: 18,
+              color: AppTheme.gray400,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 다이얼로그 반환 래퍼 (null과 취소를 구분)
+class _SiteSearchResult {
+  final Site? site;
+  _SiteSearchResult(this.site);
+}
+
+class _SiteSearchDialog extends StatefulWidget {
+  final List<Site> sites;
+  final Site? selected;
+  const _SiteSearchDialog({required this.sites, this.selected});
+
+  @override
+  State<_SiteSearchDialog> createState() => _SiteSearchDialogState();
+}
+
+class _SiteSearchDialogState extends State<_SiteSearchDialog> {
+  late List<Site> _filtered;
+  final _searchCtrl = TextEditingController();
+  final _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _filtered = widget.sites;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focusNode.requestFocus());
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _onSearch(String query) {
+    final q = query.trim().toLowerCase();
+    setState(() {
+      _filtered = q.isEmpty
+          ? widget.sites
+          : widget.sites
+              .where((s) =>
+                  s.siteName.toLowerCase().contains(q) ||
+                  s.address.toLowerCase().contains(q))
+              .toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: SizedBox(
+        width: double.infinity,
+        height: MediaQuery.of(context).size.height * 0.7,
+        child: Column(
+          children: [
+            // 헤더
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 16, 8, 12),
+              decoration: const BoxDecoration(
+                color: AppTheme.primary,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.business, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('현장 선택',
+                      style: TextStyle(color: Colors.white,
+                        fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                    onPressed: () => Navigator.pop(context),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                  ),
+                ],
+              ),
+            ),
+
+            // 검색창
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+              child: TextField(
+                controller: _searchCtrl,
+                focusNode: _focusNode,
+                onChanged: _onSearch,
+                decoration: InputDecoration(
+                  hintText: '현장명 또는 주소로 검색...',
+                  hintStyle: const TextStyle(fontSize: 13, color: AppTheme.gray400),
+                  prefixIcon: const Icon(Icons.search, size: 20, color: AppTheme.gray400),
+                  suffixIcon: _searchCtrl.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            _onSearch('');
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: AppTheme.gray50,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppTheme.gray200),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppTheme.gray200),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                  ),
+                ),
+              ),
+            ),
+
+            // 결과 수
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: [
+                  Text('${_filtered.length}개 현장',
+                    style: const TextStyle(fontSize: 12, color: AppTheme.gray500)),
+                ],
+              ),
+            ),
+
+            const Divider(height: 1),
+
+            // 목록
+            Expanded(
+              child: _filtered.isEmpty
+                  ? const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.search_off, size: 40, color: AppTheme.gray300),
+                          SizedBox(height: 8),
+                          Text('검색 결과가 없습니다',
+                            style: TextStyle(fontSize: 13, color: AppTheme.gray400)),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: _filtered.length,
+                      itemBuilder: (context, i) {
+                        final site = _filtered[i];
+                        final isSelected = site.id == widget.selected?.id;
+                        return ListTile(
+                          dense: true,
+                          selected: isSelected,
+                          selectedTileColor: AppTheme.primaryLight,
+                          leading: Container(
+                            width: 36, height: 36,
+                            decoration: BoxDecoration(
+                              color: isSelected ? AppTheme.primary : AppTheme.gray100,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.business_outlined,
+                              size: 18,
+                              color: isSelected ? Colors.white : AppTheme.gray500,
+                            ),
+                          ),
+                          title: Text(
+                            site.siteName,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                              color: isSelected ? AppTheme.primary : AppTheme.gray800,
+                            ),
+                          ),
+                          subtitle: site.address.isNotEmpty
+                              ? Text(
+                                  site.address,
+                                  style: const TextStyle(fontSize: 11, color: AppTheme.gray400),
+                                  overflow: TextOverflow.ellipsis,
+                                )
+                              : null,
+                          trailing: isSelected
+                              ? const Icon(Icons.check_circle, color: AppTheme.primary, size: 20)
+                              : null,
+                          onTap: () => Navigator.pop(context, _SiteSearchResult(site)),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
