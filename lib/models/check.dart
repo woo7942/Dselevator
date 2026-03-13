@@ -249,6 +249,7 @@ class DashboardData {
   final Map<String, dynamic>? quarterlyStats;
   final List<dynamic> recentIssues;
   final List<dynamic> upcomingInspectionList;
+  final List<dynamic> teamStats;  // 팀별 통계
 
   DashboardData({
     this.sites = 0,
@@ -259,6 +260,7 @@ class DashboardData {
     this.quarterlyStats,
     this.recentIssues = const [],
     this.upcomingInspectionList = const [],
+    this.teamStats = const [],
   });
 
   factory DashboardData.fromJson(Map<String, dynamic> json) {
@@ -271,6 +273,7 @@ class DashboardData {
       quarterlyStats: json['quarterlyStats'] as Map<String, dynamic>?,
       recentIssues: json['recentIssues'] as List<dynamic>? ?? [],
       upcomingInspectionList: json['upcomingInspectionList'] as List<dynamic>? ?? [],
+      teamStats: json['teamStats'] as List<dynamic>? ?? [],
     );
   }
 }

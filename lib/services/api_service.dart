@@ -132,8 +132,9 @@ class ApiService {
   }
 
   // ── 대시보드 ──────────────────────────────────────────────
-  static Future<DashboardData> getDashboard() async {
-    final res = await _get('/api/dashboard');
+  static Future<DashboardData> getDashboard({String? team}) async {
+    final params = team != null && team != '전체' ? {'team': team} : <String, String>{};
+    final res = await _get('/api/dashboard', params: params.isNotEmpty ? params : null);
     return DashboardData.fromJson(res['data'] as Map<String, dynamic>? ?? {});
   }
 

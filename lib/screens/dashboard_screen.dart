@@ -16,17 +16,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
   DashboardData? _data;
   bool _loading = true;
   String? _error;
+  String _selectedTeam = '전체';   // 팀 탭 선택
+  List<String> _teamOptions = ['전체', '파주1팀', '파주2팀'];
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadTeams();
+  }
+
+  Future<void> _loadTeams() async {
+    try {
+      final teams = await ApiService.getTeams();
+      if (mounted && teams.isNotEmpty) {
+        setState(() => _teamOptions = ['전체', ...teams]);
+      }
+    } catch (_) {}
   }
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final data = await ApiService.getDashboard();
+      final data = await ApiService.getDashboard(
+        team: _selectedTeam != '전체' ? _selectedTeam : null,
+      );
       if (mounted) setState(() { _data = data; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
@@ -37,17 +51,132 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('대시보드'),
+        title: Row(
+          children: [
+            const Text('대시보드'),
+            if (_selectedTeam != '전체') ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _teamBgColor(_selectedTeam),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _selectedTeam,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _teamFgColor(_selectedTeam),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
         ],
       ),
-      body: _loading
-          ? const LoadingWidget()
-          : _error != null
-              ? ErrorWidget2(message: _error!, onRetry: _load)
-              : _buildDashboard(),
+      body: Column(
+        children: [
+          // 팀 탭바
+          _buildTeamTabBar(),
+          // 콘텐츠
+          Expanded(
+            child: _loading
+                ? const LoadingWidget()
+                : _error != null
+                    ? ErrorWidget2(message: _error!, onRetry: _load)
+                    : _buildDashboard(),
+          ),
+        ],
+      ),
     );
+  }
+
+  // ── 팀 탭바 ──────────────────────────────────────────────────
+  Widget _buildTeamTabBar() {
+    return Container(
+      height: 44,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: AppTheme.gray200, width: 1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 12),
+          const Icon(Icons.group_outlined, size: 15, color: AppTheme.gray500),
+          const SizedBox(width: 6),
+          Expanded(
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: _teamOptions.map((t) {
+                final isSelected = t == _selectedTeam;
+                Color selColor = t == '전체'
+                    ? AppTheme.primary
+                    : _teamFgColor(t);
+                return GestureDetector(
+                  onTap: () {
+                    if (_selectedTeam == t) return;
+                    setState(() => _selectedTeam = t);
+                    _load();
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: isSelected ? selColor.withValues(alpha: 0.12) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected ? selColor : Colors.transparent,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        t,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+                          color: isSelected ? selColor : AppTheme.gray500,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _teamFgColor(String team) {
+    switch (team) {
+      case '파주1팀': return const Color(0xFF1565C0);
+      case '파주2팀': return const Color(0xFF6A1B9A);
+      default: return AppTheme.primary;
+    }
+  }
+
+  Color _teamBgColor(String team) {
+    switch (team) {
+      case '파주1팀': return const Color(0xFFE3F2FD);
+      case '파주2팀': return const Color(0xFFF3E5F5);
+      default: return AppTheme.primaryLight;
+    }
   }
 
   Widget _buildDashboard() {
@@ -59,6 +188,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 전체 보기일 때만 팀별 요약 카드 표시
+            if (_selectedTeam == '전체' && d.teamStats.isNotEmpty) ...[
+              _buildTeamSummaryRow(d),
+              const SizedBox(height: 16),
+            ],
             _buildKpiGrid(d),
             const SizedBox(height: 16),
             _buildStatsRow(d),
@@ -66,6 +200,223 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _buildUpcomingInspections(d),
             const SizedBox(height: 16),
             _buildRecentIssues(d),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── 팀별 요약 카드 (전체 보기 시) ────────────────────────────
+  Widget _buildTeamSummaryRow(DashboardData d) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 섹션 헤더
+        Row(
+          children: [
+            Container(
+              width: 3,
+              height: 16,
+              decoration: BoxDecoration(
+                color: AppTheme.primary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              '팀별 현황',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.gray800,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: d.teamStats.map((t) {
+            final m = t as Map<String, dynamic>;
+            final team = m['team']?.toString() ?? '';
+            final siteCount = (m['site_count'] as num?)?.toInt() ?? 0;
+            final elevCount = (m['elevator_count'] as num?)?.toInt() ?? 0;
+            final faultCount = (m['fault_count'] as num?)?.toInt() ?? 0;
+            final warnCount = (m['warning_count'] as num?)?.toInt() ?? 0;
+            final pendIssues = (m['pending_issues'] as num?)?.toInt() ?? 0;
+            final critIssues = (m['critical_issues'] as num?)?.toInt() ?? 0;
+            final fg = _teamFgColor(team);
+            final bg = _teamBgColor(team);
+
+            return Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() => _selectedTeam = team);
+                  _load();
+                },
+                child: Container(
+                  margin: EdgeInsets.only(
+                    right: d.teamStats.last == t ? 0 : 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: fg.withValues(alpha: 0.3), width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: fg.withValues(alpha: 0.08),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      // 팀 색상 헤더
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: bg,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.group, size: 14, color: fg),
+                            const SizedBox(width: 6),
+                            Text(
+                              team,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: fg,
+                              ),
+                            ),
+                            const Spacer(),
+                            Icon(Icons.chevron_right, size: 14, color: fg.withValues(alpha: 0.5)),
+                          ],
+                        ),
+                      ),
+                      // 통계 내용
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          children: [
+                            // 현장 / 승강기
+                            Row(
+                              children: [
+                                _teamStatItem(Icons.business, '$siteCount', '현장', AppTheme.info),
+                                const SizedBox(width: 8),
+                                _teamStatItem(Icons.elevator, '$elevCount', '승강기', AppTheme.primary),
+                              ],
+                            ),
+                            if (faultCount > 0 || warnCount > 0) ...[
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  if (faultCount > 0)
+                                    _teamStatItem(Icons.error_outline, '$faultCount', '고장', AppTheme.danger),
+                                  if (faultCount > 0 && warnCount > 0)
+                                    const SizedBox(width: 8),
+                                  if (warnCount > 0)
+                                    _teamStatItem(Icons.warning_amber, '$warnCount', '주의', AppTheme.warning),
+                                ],
+                              ),
+                            ],
+                            if (pendIssues > 0) ...[
+                              const SizedBox(height: 6),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: critIssues > 0
+                                      ? AppTheme.dangerLight
+                                      : AppTheme.warningLight,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.warning_rounded,
+                                      size: 12,
+                                      color: critIssues > 0 ? AppTheme.danger : AppTheme.warning,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '미조치 $pendIssues건${critIssues > 0 ? " (중결함 $critIssues)" : ""}',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: critIssues > 0 ? AppTheme.danger : AppTheme.warning,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ] else ...[
+                              const SizedBox(height: 6),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.successLight,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.check_circle, size: 12, color: AppTheme.success),
+                                    SizedBox(width: 4),
+                                    Text('지적사항 없음',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppTheme.success,
+                                        )),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _teamStatItem(IconData icon, String value, String label, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 4),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+            const SizedBox(width: 3),
+            Text(
+              label,
+              style: TextStyle(fontSize: 10, color: color.withValues(alpha: 0.7)),
+            ),
           ],
         ),
       ),
