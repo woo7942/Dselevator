@@ -80,7 +80,13 @@ class _SitesScreenState extends State<SitesScreen> {
       body: Column(
         children: [
           _buildSearchBar(),
-          _buildTeamTabs(),       // 팀 필터 탭 (파주1팀/파주2팀)
+          TeamTabBar(
+            selected: _selectedTeam,
+            onChanged: (t) {
+              setState(() => _selectedTeam = t);
+              _load();
+            },
+          ),       // 팀 필터 탭 (파주1팀/파주2팀)
           _buildRegionTabs(),
           Expanded(
             child: _loading
@@ -142,50 +148,6 @@ class _SitesScreenState extends State<SitesScreen> {
             ),
             child: const Icon(Icons.search, size: 16),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTeamTabs() {
-    const teams = ['전체', '파주1팀', '파주2팀'];
-    return Container(
-      height: 40,
-      color: AppTheme.primary.withValues(alpha: 0.04),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Row(
-        children: [
-          const Icon(Icons.group_outlined, size: 14, color: AppTheme.gray500),
-          const SizedBox(width: 6),
-          ...teams.map((t) {
-            final selected = t == _selectedTeam;
-            return GestureDetector(
-              onTap: () {
-                setState(() => _selectedTeam = t);
-                _load();
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                margin: const EdgeInsets.only(right: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: selected ? AppTheme.primary : Colors.transparent,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: selected ? AppTheme.primary : AppTheme.gray300,
-                  ),
-                ),
-                child: Text(
-                  t,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                    color: selected ? Colors.white : AppTheme.gray600,
-                  ),
-                ),
-              ),
-            );
-          }),
         ],
       ),
     );
@@ -730,6 +692,50 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
     _loadTeams();
   }
 
+  Future<void> _addTeam() async {
+    final ctrl = TextEditingController();
+    final newTeam = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(children: [
+          Icon(Icons.group_add, size: 20),
+          SizedBox(width: 8),
+          Text('팀 추가', style: TextStyle(fontSize: 16)),
+        ]),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: '팀 이름',
+            hintText: '예) 파주3팀',
+            prefixIcon: Icon(Icons.group_outlined, size: 18),
+          ),
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('추가'),
+          ),
+        ],
+      ),
+    );
+    if (newTeam == null || newTeam.isEmpty) return;
+    try {
+      await ApiService.addTeam(newTeam);
+      setState(() {
+        if (!_teamOptions.contains(newTeam)) {
+          _teamOptions = [..._teamOptions, newTeam];
+        }
+        _team = newTeam;
+      });
+      if (mounted) showToast(context, "'$newTeam' 팀이 추가되었습니다.");
+    } catch (e) {
+      if (mounted) showToast(context, '팀 추가 실패: $e', isError: true);
+    }
+  }
+
   Future<void> _loadTeams() async {
     try {
       final teams = await ApiService.getTeams();
@@ -816,19 +822,41 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
                         ],
                       ),
                       _field(_mgCtrl, '담당자'),
-                      // ── 팀 선택 ──
-                      DropdownButtonFormField<String>(
-                        value: _teamOptions.contains(_team) ? _team : null,
-                        decoration: const InputDecoration(
-                          labelText: '팀',
-                          prefixIcon: Icon(Icons.group_outlined, size: 18),
-                        ),
-                        hint: const Text('팀 선택'),
-                        items: [
-                          const DropdownMenuItem(value: null, child: Text('팀 없음')),
-                          ..._teamOptions.map((t) => DropdownMenuItem(value: t, child: Text(t))),
+                      // ── 팀 선택 + 팀 추가 버튼 ──
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: _teamOptions.contains(_team) ? _team : null,
+                              decoration: const InputDecoration(
+                                labelText: '팀',
+                                prefixIcon: Icon(Icons.group_outlined, size: 18),
+                              ),
+                              hint: const Text('팀 선택'),
+                              items: [
+                                const DropdownMenuItem(value: null, child: Text('팀 없음')),
+                                ..._teamOptions.map((t) => DropdownMenuItem(value: t, child: Text(t))),
+                              ],
+                              onChanged: (v) => setState(() => _team = v),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // 팀 추가 버튼
+                          SizedBox(
+                            height: 48,
+                            child: OutlinedButton.icon(
+                              onPressed: _addTeam,
+                              icon: const Icon(Icons.add, size: 16),
+                              label: const Text('팀 추가', style: TextStyle(fontSize: 12)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppTheme.primary,
+                                side: const BorderSide(color: AppTheme.primary),
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                              ),
+                            ),
+                          ),
                         ],
-                        onChanged: (v) => setState(() => _team = v),
                       ),
                       const SizedBox(height: 4),
                       DropdownButtonFormField<String>(

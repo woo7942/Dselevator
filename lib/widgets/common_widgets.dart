@@ -1,6 +1,83 @@
 import 'package:flutter/material.dart';
 import '../utils/theme.dart';
 import '../models/site.dart';
+import '../services/api_service.dart';
+
+// ── 공통 팀 탭바 ──────────────────────────────────────────────
+// 사용법: TeamTabBar(selected: _selectedTeam, onChanged: (t) { setState(()=>_selectedTeam=t); _load(); })
+class TeamTabBar extends StatefulWidget {
+  final String selected;
+  final ValueChanged<String> onChanged;
+  const TeamTabBar({super.key, required this.selected, required this.onChanged});
+
+  @override
+  State<TeamTabBar> createState() => _TeamTabBarState();
+}
+
+class _TeamTabBarState extends State<TeamTabBar> {
+  List<String> _teams = ['전체', '파주1팀', '파주2팀'];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTeams();
+  }
+
+  Future<void> _loadTeams() async {
+    try {
+      final teams = await ApiService.getTeams();
+      if (mounted && teams.isNotEmpty) {
+        setState(() => _teams = ['전체', ...teams]);
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 40,
+      color: AppTheme.primary.withValues(alpha: 0.04),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
+        children: [
+          const Icon(Icons.group_outlined, size: 14, color: AppTheme.gray500),
+          const SizedBox(width: 6),
+          Expanded(
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: _teams.map((t) {
+                final selected = t == widget.selected;
+                return GestureDetector(
+                  onTap: () => widget.onChanged(t),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: selected ? AppTheme.primary : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: selected ? AppTheme.primary : AppTheme.gray300,
+                      ),
+                    ),
+                    child: Text(
+                      t,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                        color: selected ? Colors.white : AppTheme.gray600,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class StatusBadge extends StatelessWidget {
   final String status;

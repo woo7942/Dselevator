@@ -22,6 +22,7 @@ class MonthlyCheck {
   // Join fields
   final String? siteName;
   final String? elevatorName;
+  final String? teamName;
 
   MonthlyCheck({
     this.id,
@@ -46,6 +47,7 @@ class MonthlyCheck {
     this.notes,
     this.siteName,
     this.elevatorName,
+    this.teamName,
   });
 
   factory MonthlyCheck.fromJson(Map<String, dynamic> json) {
@@ -72,6 +74,7 @@ class MonthlyCheck {
       notes: json['notes'] as String?,
       siteName: json['site_name'] as String?,
       elevatorName: json['elevator_name'] as String?,
+      teamName: json['team'] as String?,
     );
   }
 
@@ -133,6 +136,7 @@ class QuarterlyCheck {
   // Join fields
   final String? siteName;
   final String? elevatorName;
+  final String? teamName;
 
   QuarterlyCheck({
     this.id,
@@ -165,6 +169,7 @@ class QuarterlyCheck {
     this.notes,
     this.siteName,
     this.elevatorName,
+    this.teamName,
   });
 
   factory QuarterlyCheck.fromJson(Map<String, dynamic> json) {
@@ -199,6 +204,7 @@ class QuarterlyCheck {
       notes: json['notes'] as String?,
       siteName: json['site_name'] as String?,
       elevatorName: json['elevator_name'] as String?,
+      teamName: json['team'] as String?,
     );
   }
 

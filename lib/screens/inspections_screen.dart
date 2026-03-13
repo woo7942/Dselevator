@@ -19,8 +19,10 @@ class _InspectionsScreenState extends State<InspectionsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
   List<Inspection> _inspections = [];
+  List<Inspection> _filteredInspections = [];
   bool _loading = true;
   String? _error;
+  String _selectedTeam = '전체';
 
   // 캘린더 상태
   DateTime _focusedDay = DateTime.now();
@@ -49,13 +51,25 @@ class _InspectionsScreenState extends State<InspectionsScreen>
       if (mounted) {
         setState(() {
           _inspections = inspections;
-          _buildEventMap(inspections);
+          _applyTeamFilter();
           _loading = false;
         });
       }
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
+  }
+
+  void _applyTeamFilter() {
+    if (_selectedTeam == '전체') {
+      _filteredInspections = List.from(_inspections);
+    } else {
+      _filteredInspections = _inspections.where((ins) {
+        // site_name 기준으로 팀 필터 (site 객체에 team 없으므로 siteId 기반은 어려워 이름으로 필터)
+        return ins.teamName == _selectedTeam;
+      }).toList();
+    }
+    _buildEventMap(_filteredInspections);
   }
 
   void _buildEventMap(List<Inspection> inspections) {
@@ -78,7 +92,7 @@ class _InspectionsScreenState extends State<InspectionsScreen>
   // 현재 포커스된 달의 검사 통계
   Map<String, int> _getMonthStats() {
     final stats = {'예정': 0, '합격': 0, '조건부합격': 0, '불합격': 0, '보류': 0, '전체': 0};
-    for (final ins in _inspections) {
+    for (final ins in _filteredInspections) {
       try {
         final d = DateTime.parse(ins.inspectionDate);
         if (d.year == _focusedDay.year && d.month == _focusedDay.month) {
@@ -174,11 +188,25 @@ class _InspectionsScreenState extends State<InspectionsScreen>
           ? const LoadingWidget()
           : _error != null
               ? ErrorWidget2(message: _error!, onRetry: _load)
-              : TabBarView(
-                  controller: _tabCtrl,
+              : Column(
                   children: [
-                    _buildCalendarView(),
-                    _buildListView(),
+                    TeamTabBar(
+                      selected: _selectedTeam,
+                      onChanged: (t) {
+                        setState(() => _selectedTeam = t);
+                        _applyTeamFilter();
+                        if (mounted) setState(() {});
+                      },
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        controller: _tabCtrl,
+                        children: [
+                          _buildCalendarView(),
+                          _buildListView(),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
     );
@@ -659,11 +687,11 @@ class _InspectionsScreenState extends State<InspectionsScreen>
 
   // ── 목록 탭 ─────────────────────────────────────────────────
   Widget _buildListView() {
-    if (_inspections.isEmpty) {
+    if (_filteredInspections.isEmpty) {
       return const EmptyWidget(message: '검사 기록이 없습니다', icon: Icons.assignment_outlined);
     }
     // 날짜 내림차순 정렬
-    final sorted = List<Inspection>.from(_inspections)
+    final sorted = List<Inspection>.from(_filteredInspections)
       ..sort((a, b) {
         try {
           return DateTime.parse(b.inspectionDate)

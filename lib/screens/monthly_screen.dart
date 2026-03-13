@@ -23,6 +23,7 @@ class _MonthlyScreenState extends State<MonthlyScreen>
   int _year = DateTime.now().year;
   int _month = DateTime.now().month;
   String _statusFilter = '';
+  String _selectedTeam = '전체';
 
   // 현장 목록
   List<Site> _sites = [];
@@ -60,7 +61,8 @@ class _MonthlyScreenState extends State<MonthlyScreen>
         month: _month,
         status: _statusFilter.isNotEmpty ? _statusFilter : null,
       );
-      if (mounted) setState(() { _checks = checks; _loading = false; });
+      final filtered = _selectedTeam == '전체' ? checks : checks.where((c) => c.teamName == _selectedTeam).toList();
+      if (mounted) setState(() { _checks = filtered; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
@@ -141,6 +143,10 @@ class _MonthlyScreenState extends State<MonthlyScreen>
       ),
       body: Column(
         children: [
+          TeamTabBar(
+            selected: _selectedTeam,
+            onChanged: (t) { setState(() => _selectedTeam = t); _load(); },
+          ),
           _buildTopBar(),
           Expanded(
             child: TabBarView(

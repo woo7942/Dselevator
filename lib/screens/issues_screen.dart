@@ -29,6 +29,7 @@ class _IssuesScreenState extends State<IssuesScreen>
   String? _error;
   String _statusFilter = '';
   String _severityFilter = '';
+  String _selectedTeam = '전체';
   // 그룹 보기 모드: 'elevator' | 'site' | 'list'
   String _groupMode = 'elevator';
 
@@ -52,7 +53,8 @@ class _IssuesScreenState extends State<IssuesScreen>
         status: _statusFilter.isNotEmpty ? _statusFilter : null,
         severity: _severityFilter.isNotEmpty ? _severityFilter : null,
       );
-      if (mounted) setState(() { _issues = issues; _loading = false; });
+      final filtered = _selectedTeam == '전체' ? issues : issues.where((i) => i.teamName == _selectedTeam).toList();
+      if (mounted) setState(() { _issues = filtered; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
@@ -163,7 +165,14 @@ class _IssuesScreenState extends State<IssuesScreen>
           ),
         ),
       ),
-      body: TabBarView(
+      body: Column(
+        children: [
+          TeamTabBar(
+            selected: _selectedTeam,
+            onChanged: (t) { setState(() => _selectedTeam = t); _load(); },
+          ),
+          Expanded(
+            child: TabBarView(
         controller: _tabCtrl,
         children: [
           // ── 탭 1: 목록 ────────────────────────────────────────
@@ -190,6 +199,9 @@ class _IssuesScreenState extends State<IssuesScreen>
             _load();
             _tabCtrl.animateTo(0);
           }),
+        ],
+      ),
+          ),
         ],
       ),
     );

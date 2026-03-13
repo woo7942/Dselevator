@@ -23,6 +23,7 @@ class _QuarterlyScreenState extends State<QuarterlyScreen>
   int _year = DateTime.now().year;
   int _quarter = ((DateTime.now().month + 2) ~/ 3);
   String _statusFilter = '';
+  String _selectedTeam = '전체';
 
   List<Site> _sites = [];
   Site? _filterSite;
@@ -59,7 +60,8 @@ class _QuarterlyScreenState extends State<QuarterlyScreen>
         quarter: _quarter,
         status: _statusFilter.isNotEmpty ? _statusFilter : null,
       );
-      if (mounted) setState(() { _checks = checks; _loading = false; });
+      final filtered = _selectedTeam == '전체' ? checks : checks.where((c) => c.teamName == _selectedTeam).toList();
+      if (mounted) setState(() { _checks = filtered; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
@@ -140,6 +142,10 @@ class _QuarterlyScreenState extends State<QuarterlyScreen>
       ),
       body: Column(
         children: [
+          TeamTabBar(
+            selected: _selectedTeam,
+            onChanged: (t) { setState(() => _selectedTeam = t); _load(); },
+          ),
           _buildTopBar(),
           Expanded(
             child: TabBarView(

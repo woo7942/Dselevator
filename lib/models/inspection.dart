@@ -14,6 +14,7 @@ class Inspection {
   final String? createdAt;
   final String? siteName;
   final double? daysRemaining;
+  final String? teamName;
 
   Inspection({
     this.id,
@@ -31,6 +32,7 @@ class Inspection {
     this.createdAt,
     this.siteName,
     this.daysRemaining,
+    this.teamName,
   });
 
   factory Inspection.fromJson(Map<String, dynamic> json) {
@@ -50,6 +52,7 @@ class Inspection {
       createdAt: json['created_at'] as String?,
       siteName: json['site_name'] as String?,
       daysRemaining: (json['days_remaining'] as num?)?.toDouble(),
+      teamName: json['team'] as String?,
     );
   }
 
@@ -102,6 +105,7 @@ class InspectionIssue {
   final String? elevatorName;
   final String? inspectionType;
   final String? inspDate;
+  final String? teamName;
 
   InspectionIssue({
     this.id,
@@ -131,6 +135,7 @@ class InspectionIssue {
     this.elevatorName,
     this.inspectionType,
     this.inspDate,
+    this.teamName,
   });
 
   /// mediaUrls JSON 문자열을 List<String>으로 파싱
@@ -176,6 +181,7 @@ class InspectionIssue {
       elevatorName: json['elevator_name'] as String?,
       inspectionType: json['inspection_type'] as String?,
       inspDate: json['insp_date'] as String?,
+      teamName: json['team'] as String?,
     );
   }
 
