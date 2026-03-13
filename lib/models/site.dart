@@ -14,6 +14,7 @@ class Site {
   final String? createdAt;
   final String? updatedAt;
   final int? elevatorCount;
+  final String? team;
 
   Site({
     this.id,
@@ -31,6 +32,7 @@ class Site {
     this.createdAt,
     this.updatedAt,
     this.elevatorCount,
+    this.team,
   });
 
   factory Site.fromJson(Map<String, dynamic> json) {
@@ -50,6 +52,7 @@ class Site {
       createdAt: json['created_at'] as String?,
       updatedAt: json['updated_at'] as String?,
       elevatorCount: (json['elevator_count'] as num?)?.toInt(),
+      team: json['team'] as String?,
     );
   }
 
@@ -67,6 +70,7 @@ class Site {
       if (contractStart != null) 'contract_start': contractStart,
       if (contractEnd != null) 'contract_end': contractEnd,
       if (notes != null) 'notes': notes,
+      if (team != null) 'team': team,
     };
   }
 

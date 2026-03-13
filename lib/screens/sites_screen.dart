@@ -18,6 +18,7 @@ class _SitesScreenState extends State<SitesScreen> {
   bool _loading = true;
   String? _error;
   String _selectedRegion = '전체';
+  String _selectedTeam = '전체';  // 팀 필터 추가
   String _searchText = '';
   String _statusFilter = '';
   final _searchCtrl = TextEditingController();
@@ -41,6 +42,7 @@ class _SitesScreenState extends State<SitesScreen> {
         search: _searchText.isNotEmpty ? _searchText : null,
         status: _statusFilter.isNotEmpty ? _statusFilter : null,
         region: _selectedRegion != '전체' ? _selectedRegion : null,
+        team: _selectedTeam != '전체' ? _selectedTeam : null,
       );
       if (mounted) setState(() { _sites = sites; _loading = false; });
     } catch (e) {
@@ -78,6 +80,7 @@ class _SitesScreenState extends State<SitesScreen> {
       body: Column(
         children: [
           _buildSearchBar(),
+          _buildTeamTabs(),       // 팀 필터 탭 (파주1팀/파주2팀)
           _buildRegionTabs(),
           Expanded(
             child: _loading
@@ -139,6 +142,50 @@ class _SitesScreenState extends State<SitesScreen> {
             ),
             child: const Icon(Icons.search, size: 16),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeamTabs() {
+    const teams = ['전체', '파주1팀', '파주2팀'];
+    return Container(
+      height: 40,
+      color: AppTheme.primary.withValues(alpha: 0.04),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
+        children: [
+          const Icon(Icons.group_outlined, size: 14, color: AppTheme.gray500),
+          const SizedBox(width: 6),
+          ...teams.map((t) {
+            final selected = t == _selectedTeam;
+            return GestureDetector(
+              onTap: () {
+                setState(() => _selectedTeam = t);
+                _load();
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                margin: const EdgeInsets.only(right: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: selected ? AppTheme.primary : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: selected ? AppTheme.primary : AppTheme.gray300,
+                  ),
+                ),
+                child: Text(
+                  t,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                    color: selected ? Colors.white : AppTheme.gray600,
+                  ),
+                ),
+              ),
+            );
+          }),
         ],
       ),
     );
@@ -236,6 +283,28 @@ class _SitesScreenState extends State<SitesScreen> {
                           child: Text(site.siteName,
                             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppTheme.gray800)),
                         ),
+                        if (site.team != null) ...[
+                          Container(
+                            margin: const EdgeInsets.only(right: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: site.team == '파주1팀'
+                                  ? const Color(0xFFE3F2FD)
+                                  : const Color(0xFFF3E5F5),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              site.team!,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: site.team == '파주1팀'
+                                    ? const Color(0xFF1565C0)
+                                    : const Color(0xFF6A1B9A),
+                              ),
+                            ),
+                          ),
+                        ],
                         StatusBadge(status: site.status),
                       ],
                     ),
@@ -635,6 +704,8 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
   late final _mgCtrl = TextEditingController(text: widget.site?.managerName);
   late final _notesCtrl = TextEditingController(text: widget.site?.notes);
   late String _status = widget.site?.status ?? 'active';
+  late String? _team = widget.site?.team;
+  List<String> _teamOptions = ['파주1팀', '파주2팀'];
 
   // 호기 목록 (신규 등록 시만 표시)
   final List<_ElevatorEntry> _elevators = [];
@@ -655,6 +726,17 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
     if (_isNew) {
       _elevators.add(_ElevatorEntry(no: '1', name: '1호기'));
     }
+    // 팀 목록 로드
+    _loadTeams();
+  }
+
+  Future<void> _loadTeams() async {
+    try {
+      final teams = await ApiService.getTeams();
+      if (mounted && teams.isNotEmpty) {
+        setState(() => _teamOptions = teams);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -734,6 +816,21 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
                         ],
                       ),
                       _field(_mgCtrl, '담당자'),
+                      // ── 팀 선택 ──
+                      DropdownButtonFormField<String>(
+                        value: _teamOptions.contains(_team) ? _team : null,
+                        decoration: const InputDecoration(
+                          labelText: '팀',
+                          prefixIcon: Icon(Icons.group_outlined, size: 18),
+                        ),
+                        hint: const Text('팀 선택'),
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('팀 없음')),
+                          ..._teamOptions.map((t) => DropdownMenuItem(value: t, child: Text(t))),
+                        ],
+                        onChanged: (v) => setState(() => _team = v),
+                      ),
+                      const SizedBox(height: 4),
                       DropdownButtonFormField<String>(
                         initialValue: _status,
                         decoration: const InputDecoration(labelText: '상태'),
@@ -1050,6 +1147,7 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
         managerName: _mgCtrl.text.isNotEmpty ? _mgCtrl.text.trim() : null,
         status: _status,
         notes: _notesCtrl.text.isNotEmpty ? _notesCtrl.text.trim() : null,
+        team: _team,
       );
 
       if (_isNew) {
