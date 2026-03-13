@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../utils/theme.dart';
@@ -9,21 +10,34 @@ class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  State<DashboardScreen> createState() => DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class DashboardScreenState extends State<DashboardScreen> {
+  // 외부(MainScreen)에서 호출해 데이터를 다시 로드할 수 있는 메서드
+  void reload() => _load();
   DashboardData? _data;
   bool _loading = true;
   String? _error;
   String _selectedTeam = '전체';   // 팀 탭 선택
   List<String> _teamOptions = ['전체', '파주1팀', '파주2팀'];
+  StreamSubscription<String>? _dataChangeSub; // 실시간 데이터 변경 구독
 
   @override
   void initState() {
     super.initState();
     _load();
     _loadTeams();
+    // 다른 화면에서 데이터 변경 시 자동 새로고침
+    _dataChangeSub = ApiService.onDataChanged.listen((_) {
+      if (mounted) _loadSilently(); // 로딩 스피너 없이 조용히 새로고침
+    });
+  }
+
+  @override
+  void dispose() {
+    _dataChangeSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadTeams() async {
@@ -33,6 +47,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         setState(() => _teamOptions = ['전체', ...teams]);
       }
     } catch (_) {}
+  }
+
+  /// 로딩 인디케이터 없이 조용히 새로고침 (다른 탭에서 데이터 변경 시)
+  Future<void> _loadSilently() async {
+    try {
+      final data = await ApiService.getDashboard(
+        team: _selectedTeam != '전체' ? _selectedTeam : null,
+      );
+      if (mounted) setState(() => _data = data);
+    } catch (_) {} // 조용히 실패 (사용자 방해 없이)
   }
 
   Future<void> _load() async {
@@ -188,10 +212,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 전체 보기일 때만 팀별 요약 카드 표시
+            // 팀별 요약 카드 표시 (전체 보기 + 팀 데이터 있을 때)
             if (_selectedTeam == '전체' && d.teamStats.isNotEmpty) ...[
               _buildTeamSummaryRow(d),
               const SizedBox(height: 16),
+            ] else if (_selectedTeam != '전체') ...[
+              _buildSelectedTeamBanner(d),
+              const SizedBox(height: 12),
             ],
             _buildKpiGrid(d),
             const SizedBox(height: 16),
@@ -388,6 +415,61 @@ class _DashboardScreenState extends State<DashboardScreen> {
           }).toList(),
         ),
       ],
+    );
+  }
+
+  // ── 특정 팀 선택 시 상단 배너 ──────────────────────────────────
+  Widget _buildSelectedTeamBanner(DashboardData d) {
+    final teamData = d.teamStats.firstWhere(
+      (t) => (t as Map<String, dynamic>)['team'] == _selectedTeam,
+      orElse: () => null,
+    );
+    if (teamData == null) return const SizedBox.shrink();
+    final m = teamData as Map<String, dynamic>;
+    final siteCount = (m['site_count'] as num?)?.toInt() ?? 0;
+    final elevCount = (m['elevator_count'] as num?)?.toInt() ?? 0;
+    final fg = _teamFgColor(_selectedTeam);
+    final bg = _teamBgColor(_selectedTeam);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: fg.withValues(alpha: 0.25), width: 1),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.group, size: 16, color: fg),
+          const SizedBox(width: 8),
+          Text(_selectedTeam,
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: fg)),
+          const SizedBox(width: 12),
+          Container(width: 1, height: 14, color: fg.withValues(alpha: 0.3)),
+          const SizedBox(width: 12),
+          Icon(Icons.business, size: 13, color: fg.withValues(alpha: 0.7)),
+          const SizedBox(width: 4),
+          Text('$siteCount개 현장',
+              style: TextStyle(fontSize: 12, color: fg.withValues(alpha: 0.8))),
+          const SizedBox(width: 12),
+          Icon(Icons.elevator, size: 13, color: fg.withValues(alpha: 0.7)),
+          const SizedBox(width: 4),
+          Text('$elevCount대',
+              style: TextStyle(fontSize: 12, color: fg.withValues(alpha: 0.8))),
+          const Spacer(),
+          GestureDetector(
+            onTap: () { setState(() => _selectedTeam = '전체'); _load(); },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: fg.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text('전체보기',
+                  style: TextStyle(fontSize: 11, color: fg, fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

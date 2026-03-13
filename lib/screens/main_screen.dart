@@ -16,7 +16,9 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
+  int _prevIndex = 0; // 이전 탭 인덱스 추적
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final GlobalKey<DashboardScreenState> _dashboardKey = GlobalKey<DashboardScreenState>();
 
   final List<_NavItem> _navItems = [
     _NavItem(icon: Icons.dashboard_outlined, activeIcon: Icons.dashboard, label: '대시보드'),
@@ -27,14 +29,31 @@ class _MainScreenState extends State<MainScreen> {
     _NavItem(icon: Icons.memory_outlined, activeIcon: Icons.memory, label: '분기점검'),
   ];
 
-  final List<Widget> _screens = [
-    const DashboardScreen(),
-    const SitesScreen(),
-    const InspectionsScreen(),
-    const IssuesScreen(),
-    const MonthlyScreen(),
-    const QuarterlyScreen(),
-  ];
+  late final List<Widget> _screens;
+
+  @override
+  void initState() {
+    super.initState();
+    _screens = [
+      DashboardScreen(key: _dashboardKey),
+      const SitesScreen(),
+      const InspectionsScreen(),
+      const IssuesScreen(),
+      const MonthlyScreen(),
+      const QuarterlyScreen(),
+    ];
+  }
+
+  void _onTabSelected(int index) {
+    // 다른 탭에서 대시보드(0)로 돌아올 때 자동 새로고침
+    if (index == 0 && _prevIndex != 0) {
+      _dashboardKey.currentState?.reload();
+    }
+    setState(() {
+      _prevIndex = _selectedIndex;
+      _selectedIndex = index;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -230,7 +249,7 @@ class _MainScreenState extends State<MainScreen> {
     final isSelected = _selectedIndex == index;
     return InkWell(
       onTap: () {
-        setState(() => _selectedIndex = index);
+        _onTabSelected(index);
         if (isDrawer) Navigator.pop(context);
       },
       borderRadius: BorderRadius.circular(8),

@@ -17,6 +17,18 @@ class ApiService {
   // 기본 서버 주소 (Render 배포 서버)
   static const String _defaultUrl = 'https://elevator-api-4lac.onrender.com';
 
+  // ── 데이터 변경 이벤트 스트림 (대시보드 실시간 새로고침용) ──────
+  static final StreamController<String> _dataChangeController =
+      StreamController<String>.broadcast();
+  static Stream<String> get onDataChanged => _dataChangeController.stream;
+
+  /// 데이터 변경 사실을 브로드캐스트 (저장/수정/삭제 후 호출)
+  static void notifyDataChanged(String type) {
+    if (!_dataChangeController.isClosed) {
+      _dataChangeController.add(type);
+    }
+  }
+
   static Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
     _baseUrl = prefs.getString(_baseUrlKey) ?? _defaultUrl;
@@ -163,30 +175,36 @@ class ApiService {
 
   static Future<int> createSite(Site site) async {
     final res = await _post('/api/sites', site.toJson());
+    notifyDataChanged('site'); // 데이터 변경 알림
     return (res['id'] as num?)?.toInt() ?? (res['data']?['id'] as num?)?.toInt() ?? 0;
   }
 
   static Future<void> updateSite(int id, Site site) async {
     await _put('/api/sites/$id', site.toJson());
+    notifyDataChanged('site'); // 데이터 변경 알림
   }
 
   static Future<void> deleteSite(int id) async {
     await _delete('/api/sites/$id');
+    notifyDataChanged('site'); // 데이터 변경 알림
   }
 
   static Future<int> createElevator(int siteId, Elevator elevator) async {
     final body = elevator.toJson();
     body['site_id'] = siteId;
     final res = await _post('/api/elevators', body);
+    notifyDataChanged('elevator'); // 데이터 변경 알림
     return (res['id'] as num?)?.toInt() ?? (res['data']?['id'] as num?)?.toInt() ?? 0;
   }
 
   static Future<void> updateElevator(int id, Elevator elevator) async {
     await _put('/api/elevators/$id', elevator.toJson());
+    notifyDataChanged('elevator'); // 데이터 변경 알림
   }
 
   static Future<void> deleteElevator(int id) async {
     await _delete('/api/elevators/$id');
+    notifyDataChanged('elevator'); // 데이터 변경 알림
   }
 
   // ── 검사 ──────────────────────────────────────────────────
@@ -223,15 +241,18 @@ class ApiService {
 
   static Future<int> createInspection(Inspection inspection) async {
     final res = await _post('/api/inspections', inspection.toJson());
+    notifyDataChanged('inspection');
     return (res['id'] as num?)?.toInt() ?? (res['data']?['id'] as num?)?.toInt() ?? 0;
   }
 
   static Future<void> updateInspection(int id, Inspection inspection) async {
     await _put('/api/inspections/$id', inspection.toJson());
+    notifyDataChanged('inspection');
   }
 
   static Future<void> deleteInspection(int id) async {
     await _delete('/api/inspections/$id');
+    notifyDataChanged('inspection');
   }
 
   // ── 지적사항 ───────────────────────────────────────────────
@@ -251,11 +272,13 @@ class ApiService {
 
   static Future<int> createIssue(InspectionIssue issue) async {
     final res = await _post('/api/issues', issue.toJson());
+    notifyDataChanged('issue');
     return (res['id'] as num?)?.toInt() ?? (res['data']?['id'] as num?)?.toInt() ?? 0;
   }
 
   static Future<void> updateIssue(int id, InspectionIssue issue) async {
     await _put('/api/issues/$id', issue.toJson());
+    notifyDataChanged('issue');
   }
 
   static Future<void> updateIssueAction(int id, {
@@ -274,15 +297,19 @@ class ApiService {
       if (photoBefore != null) 'photo_before': photoBefore,
       if (photoAfter != null) 'photo_after': photoAfter,
     });
+    notifyDataChanged('issue');
   }
 
   static Future<void> deleteIssue(int id) async {
     await _delete('/api/issues/$id');
+    notifyDataChanged('issue');
   }
 
   static Future<Map<String, dynamic>> createIssuesBulk(
       List<Map<String, dynamic>> issues) async {
-    return await _post('/api/issues/bulk', {'issues': issues});
+    final result = await _post('/api/issues/bulk', {'issues': issues});
+    notifyDataChanged('issue');
+    return result;
   }
 
   /// 파일 업로드 (이미지/동영상) - 파일 1개씩 순차 업로드
@@ -422,15 +449,18 @@ class ApiService {
 
   static Future<int> createMonthlyCheck(MonthlyCheck check) async {
     final res = await _post('/api/monthly', check.toJson());
+    notifyDataChanged('monthly');
     return (res['id'] as num?)?.toInt() ?? (res['data']?['id'] as num?)?.toInt() ?? 0;
   }
 
   static Future<void> updateMonthlyCheck(int id, MonthlyCheck check) async {
     await _put('/api/monthly/$id', check.toJson());
+    notifyDataChanged('monthly');
   }
 
   static Future<void> deleteMonthlyCheck(int id) async {
     await _delete('/api/monthly/$id');
+    notifyDataChanged('monthly');
   }
 
   // ── 분기 점검 ─────────────────────────────────────────────
@@ -450,11 +480,13 @@ class ApiService {
 
   static Future<int> createQuarterlyCheck(QuarterlyCheck check) async {
     final res = await _post('/api/quarterly', check.toJson());
+    notifyDataChanged('quarterly');
     return (res['id'] as num?)?.toInt() ?? (res['data']?['id'] as num?)?.toInt() ?? 0;
   }
 
   static Future<void> updateQuarterlyCheck(int id, QuarterlyCheck check) async {
     await _put('/api/quarterly/$id', check.toJson());
+    notifyDataChanged('quarterly');
   }
 
   static Future<void> deleteQuarterlyCheck(int id) async {
