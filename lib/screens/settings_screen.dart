@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../utils/theme.dart';
 import '../widgets/common_widgets.dart';
 import '../services/api_service.dart';
+import '../providers/auth_provider.dart';
+import 'user_manage_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -239,6 +242,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // ── 현재 연결 상태 ────────────────────────────────────
             _ConnectionStatusCard(),
             const SizedBox(height: 16),
+
+            // ── 관리자 메뉴 ──────────────────────────────────────
+            Builder(builder: (context) {
+              final isAdmin = context.watch<AuthProvider>().isAdmin;
+              if (!isAdmin) return const SizedBox.shrink();
+              return Column(
+                children: [
+                  InfoCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.admin_panel_settings, color: AppTheme.primary, size: 18),
+                            const SizedBox(width: 8),
+                            const Text('관리자 메뉴',
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.gray800)),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text('관리자 전용',
+                                  style: TextStyle(fontSize: 10, color: AppTheme.primary, fontWeight: FontWeight.w600)),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 20),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Container(
+                            width: 36, height: 36,
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.people_outline, color: AppTheme.primary, size: 18),
+                          ),
+                          title: const Text('사용자 관리', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                          subtitle: const Text('계정 추가·삭제, 탭 접근 권한 설정', style: TextStyle(fontSize: 12)),
+                          trailing: const Icon(Icons.chevron_right, color: AppTheme.gray400),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const UserManageScreen()),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              );
+            }),
 
             // ── 앱 정보 ──────────────────────────────────────────
             InfoCard(
