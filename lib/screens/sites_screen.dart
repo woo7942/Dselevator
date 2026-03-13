@@ -18,15 +18,21 @@ class _SitesScreenState extends State<SitesScreen> {
   bool _loading = true;
   String? _error;
   String _selectedRegion = '전체';
-  String _selectedTeam = '전체';  // 팀 필터 추가
+  String _selectedTeam = '전체';
   String _searchText = '';
   String _statusFilter = '';
   final _searchCtrl = TextEditingController();
+
+  // ── 다중선택 모드 ──
+  bool _selectMode = false;
+  final Set<int> _selectedIds = {};
+  List<String> _teamOptions = ['파주1팀', '파주2팀'];
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadTeams();
   }
 
   @override
@@ -50,32 +56,269 @@ class _SitesScreenState extends State<SitesScreen> {
     }
   }
 
+  Future<void> _loadTeams() async {
+    try {
+      final teams = await ApiService.getTeams();
+      if (mounted && teams.isNotEmpty) setState(() => _teamOptions = teams);
+    } catch (_) {}
+  }
+
+  // ── 다중선택 진입/해제 ──
+  void _toggleSelectMode() {
+    setState(() {
+      _selectMode = !_selectMode;
+      _selectedIds.clear();
+    });
+  }
+
+  void _toggleSelect(int id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  void _selectAll() {
+    setState(() {
+      _selectedIds.addAll(_sites.map((s) => s.id!));
+    });
+  }
+
+  void _deselectAll() {
+    setState(() => _selectedIds.clear());
+  }
+
+  // ── 선택된 현장 팀 일괄 변경 ──
+  Future<void> _bulkChangeTeam() async {
+    if (_selectedIds.isEmpty) {
+      showToast(context, '현장을 선택해주세요', isError: true);
+      return;
+    }
+
+    // 팀 선택 다이얼로그
+    String? chosenTeam = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        String? selected;
+        return StatefulBuilder(
+          builder: (ctx2, setS) => AlertDialog(
+            title: const Row(children: [
+              Icon(Icons.group, size: 20, color: AppTheme.primary),
+              SizedBox(width: 8),
+              Text('팀 일괄 변경', style: TextStyle(fontSize: 16)),
+            ]),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('선택된 현장 ${_selectedIds.length}개의 팀을 변경합니다.',
+                    style: const TextStyle(fontSize: 13, color: AppTheme.gray500)),
+                const SizedBox(height: 16),
+                // 팀 없음
+                _teamChoiceTile(ctx2, setS, null, selected, (v) => selected = v),
+                ..._teamOptions.map((t) =>
+                    _teamChoiceTile(ctx2, setS, t, selected, (v) => selected = v)),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('취소'),
+              ),
+              ElevatedButton(
+                onPressed: selected != null || selected == null
+                    ? () => Navigator.pop(ctx, selected ?? '__none__')
+                    : null,
+                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
+                child: const Text('변경', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (chosenTeam == null) return;
+    final teamValue = chosenTeam == '__none__' ? null : chosenTeam;
+
+    // 일괄 업데이트 실행
+    int success = 0;
+    int fail = 0;
+    setState(() => _loading = true);
+    for (final id in _selectedIds) {
+      try {
+        final site = _sites.firstWhere((s) => s.id == id);
+        final updated = Site(
+          id: site.id,
+          siteCode: site.siteCode,
+          siteName: site.siteName,
+          address: site.address,
+          ownerName: site.ownerName,
+          ownerPhone: site.ownerPhone,
+          managerName: site.managerName,
+          totalElevators: site.totalElevators,
+          status: site.status,
+          contractStart: site.contractStart,
+          contractEnd: site.contractEnd,
+          notes: site.notes,
+          team: teamValue,
+        );
+        await ApiService.updateSite(site.id!, updated);
+        success++;
+      } catch (_) {
+        fail++;
+      }
+    }
+
+    if (mounted) {
+      setState(() { _selectMode = false; _selectedIds.clear(); });
+      showToast(context, '${success}개 변경 완료${fail > 0 ? " (실패: $fail개)" : ""}');
+      _load();
+    }
+  }
+
+  Widget _teamChoiceTile(
+    BuildContext ctx,
+    StateSetter setS,
+    String? value,
+    String? selected,
+    void Function(String?) onSelect,
+  ) {
+    final label = value ?? '팀 없음';
+    final Color bg = value == null
+        ? AppTheme.gray100
+        : _teamColor(value).withValues(alpha: 0.12);
+    final Color fg = value == null ? AppTheme.gray600 : _teamColor(value);
+    final bool isSelected = selected == value ||
+        (selected == null && value == null);
+    return GestureDetector(
+      onTap: () => setS(() => onSelect(value)),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? fg.withValues(alpha: 0.12) : Colors.white,
+          border: Border.all(
+            color: isSelected ? fg : AppTheme.gray200,
+            width: isSelected ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 16, height: 16,
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+                    color: isSelected ? fg : AppTheme.gray700)),
+            const Spacer(),
+            if (isSelected)
+              Icon(Icons.check_circle, size: 18, color: fg),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _teamColor(String team) {
+    switch (team) {
+      case '파주1팀': return const Color(0xFF1565C0);
+      case '파주2팀': return const Color(0xFF6A1B9A);
+      default: return AppTheme.primary;
+    }
+  }
+
+  Color _teamBgColor(String team) {
+    switch (team) {
+      case '파주1팀': return const Color(0xFFE3F2FD);
+      case '파주2팀': return const Color(0xFFF3E5F5);
+      default: return AppTheme.primaryLight;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final selCount = _selectedIds.length;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('현장 관리'),
-        actions: [
-          TextButton.icon(
-            onPressed: _load,
-            icon: const Icon(Icons.refresh, size: 15),
-            label: const Text('새로고침', style: TextStyle(fontSize: 12)),
-            style: TextButton.styleFrom(foregroundColor: AppTheme.gray600),
-          ),
-          const SizedBox(width: 2),
-          TextButton.icon(
-            onPressed: () => _openSiteForm(null),
-            icon: const Icon(Icons.add, size: 15),
-            label: const Text('현장 등록', style: TextStyle(fontSize: 12)),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.white,
-              backgroundColor: AppTheme.primary,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
+        title: _selectMode
+            ? Text('$selCount개 선택됨',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))
+            : const Text('현장 관리'),
+        backgroundColor: _selectMode ? const Color(0xFFE8F0FE) : null,
+        foregroundColor: _selectMode ? AppTheme.primary : null,
+        elevation: _selectMode ? 0 : null,
+        actions: _selectMode
+            ? [
+                // 전체선택/해제
+                TextButton(
+                  onPressed: selCount == _sites.length ? _deselectAll : _selectAll,
+                  child: Text(
+                    selCount == _sites.length ? '전체해제' : '전체선택',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+                // 팀 변경
+                TextButton.icon(
+                  onPressed: _bulkChangeTeam,
+                  icon: const Icon(Icons.group, size: 16),
+                  label: const Text('팀 변경', style: TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: AppTheme.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                // 취소
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: _toggleSelectMode,
+                ),
+                const SizedBox(width: 4),
+              ]
+            : [
+                TextButton.icon(
+                  onPressed: _load,
+                  icon: const Icon(Icons.refresh, size: 15),
+                  label: const Text('새로고침', style: TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(foregroundColor: AppTheme.gray600),
+                ),
+                const SizedBox(width: 2),
+                // 다중선택 모드 버튼
+                TextButton.icon(
+                  onPressed: _toggleSelectMode,
+                  icon: const Icon(Icons.checklist, size: 15),
+                  label: const Text('선택', style: TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppTheme.gray700,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => _openSiteForm(null),
+                  icon: const Icon(Icons.add, size: 15),
+                  label: const Text('현장 등록', style: TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: AppTheme.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
       ),
       body: Column(
         children: [
@@ -86,8 +329,25 @@ class _SitesScreenState extends State<SitesScreen> {
               setState(() => _selectedTeam = t);
               _load();
             },
-          ),       // 팀 필터 탭 (파주1팀/파주2팀)
+          ),
           _buildRegionTabs(),
+          // 선택 모드 안내 바
+          if (_selectMode)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: const Color(0xFFE8F0FE),
+              child: Text(
+                selCount == 0
+                    ? '현장을 탭하여 선택하세요 (롱탭으로도 선택 가능)'
+                    : '$selCount개의 현장이 선택됨 · 팀 변경 버튼으로 일괄 변경',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: selCount == 0 ? AppTheme.gray500 : AppTheme.primary,
+                  fontWeight: selCount > 0 ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+            ),
           Expanded(
             child: _loading
                 ? const LoadingWidget()
@@ -209,7 +469,7 @@ class _SitesScreenState extends State<SitesScreen> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
         itemCount: _sites.length,
         itemBuilder: (_, i) => _buildSiteCard(_sites[i]),
       ),
@@ -218,113 +478,233 @@ class _SitesScreenState extends State<SitesScreen> {
 
   Widget _buildSiteCard(Site site) {
     final elevCnt = site.elevatorCount ?? site.totalElevators;
-    return InfoCard(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    final isSelected = _selectedIds.contains(site.id);
+    final teamColor = site.team != null ? _teamColor(site.team!) : null;
+    final teamBg = site.team != null ? _teamBgColor(site.team!) : null;
+
+    return GestureDetector(
+      onLongPress: () {
+        if (!_selectMode) {
+          setState(() {
+            _selectMode = true;
+            _selectedIds.add(site.id!);
+          });
+        }
+      },
+      onTap: _selectMode
+          ? () => _toggleSelect(site.id!)
+          : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected
+                ? AppTheme.primary
+                : (site.team != null ? teamColor!.withValues(alpha: 0.25) : AppTheme.gray200),
+            width: isSelected ? 2.5 : 1.2,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppTheme.primary.withValues(alpha: 0.12),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+        ),
+        child: Column(
+          children: [
+            // ── 팀 색상 상단 바 ──
+            if (site.team != null)
               Container(
-                width: 40,
-                height: 40,
+                height: 4,
                 decoration: BoxDecoration(
-                  color: AppTheme.infoLight,
-                  borderRadius: BorderRadius.circular(8),
+                  color: teamColor,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
                 ),
-                child: const Icon(Icons.business, color: AppTheme.info, size: 20),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(site.siteName,
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppTheme.gray800)),
-                        ),
-                        if (site.team != null) ...[
-                          Container(
-                            margin: const EdgeInsets.only(right: 4),
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: site.team == '파주1팀'
-                                  ? const Color(0xFFE3F2FD)
-                                  : const Color(0xFFF3E5F5),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              site.team!,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: site.team == '파주1팀'
-                                    ? const Color(0xFF1565C0)
-                                    : const Color(0xFF6A1B9A),
-                              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              child: Column(
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 선택 체크박스 or 아이콘
+                      if (_selectMode)
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppTheme.primary
+                                : AppTheme.gray100,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isSelected ? AppTheme.primary : AppTheme.gray300,
+                              width: 1.5,
                             ),
                           ),
+                          child: Icon(
+                            isSelected ? Icons.check : Icons.check,
+                            color: isSelected ? Colors.white : AppTheme.gray300,
+                            size: 20,
+                          ),
+                        )
+                      else
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: site.team != null
+                                ? teamBg
+                                : AppTheme.infoLight,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            Icons.business,
+                            color: site.team != null ? teamColor : AppTheme.info,
+                            size: 20,
+                          ),
+                        ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // 현장명 + 배지들
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    site.siteName,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                      color: isSelected
+                                          ? AppTheme.primary
+                                          : AppTheme.gray800,
+                                      letterSpacing: -0.2,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                if (site.team != null) ...[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: teamBg,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: teamColor!.withValues(alpha: 0.3),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      site.team!,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: teamColor,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                ],
+                                StatusBadge(status: site.status),
+                              ],
+                            ),
+                            const SizedBox(height: 5),
+                            // 주소
+                            Row(
+                              children: [
+                                const Icon(Icons.location_on_outlined,
+                                    size: 12, color: AppTheme.gray400),
+                                const SizedBox(width: 3),
+                                Expanded(
+                                  child: Text(
+                                    site.address,
+                                    style: const TextStyle(
+                                        fontSize: 12, color: AppTheme.gray500),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  // ── 하단 구분선 + 정보 행 ──
+                  const SizedBox(height: 10),
+                  Container(
+                    height: 1,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          AppTheme.gray200,
+                          AppTheme.gray200,
+                          Colors.transparent,
                         ],
-                        StatusBadge(status: site.status),
-                      ],
+                      ),
                     ),
-                    const SizedBox(height: 2),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on_outlined, size: 12, color: AppTheme.gray400),
-                        const SizedBox(width: 2),
-                        Expanded(
-                          child: Text(site.address,
-                            style: const TextStyle(fontSize: 12, color: AppTheme.gray500),
-                            overflow: TextOverflow.ellipsis),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      _buildInfoChip(Icons.elevator, '승강기 $elevCnt대', AppTheme.primary),
+                      const SizedBox(width: 8),
+                      if (site.managerName != null)
+                        _buildInfoChip(
+                            Icons.person_outline, site.managerName!, AppTheme.gray500),
+                      const Spacer(),
+                      if (!_selectMode) ...[
+                        TextButton(
+                          onPressed: () => _openSiteDetail(site),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text('상세보기',
+                              style: TextStyle(fontSize: 12)),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, size: 16),
+                          onPressed: () => _openSiteForm(site),
+                          color: AppTheme.gray400,
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 16),
+                          onPressed: () => _deleteSite(site),
+                          color: AppTheme.danger,
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(),
                         ),
                       ],
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          const Divider(height: 1),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _buildInfoChip(Icons.elevator, '승강기 $elevCnt대', AppTheme.primary),
-              const SizedBox(width: 8),
-              if (site.managerName != null)
-                _buildInfoChip(Icons.person_outline, site.managerName!, AppTheme.gray500),
-              const Spacer(),
-              TextButton(
-                onPressed: () => _openSiteDetail(site),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: const Text('상세보기', style: TextStyle(fontSize: 12)),
-              ),
-              const SizedBox(width: 4),
-              IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 16),
-                onPressed: () => _openSiteForm(site),
-                color: AppTheme.gray400,
-                padding: const EdgeInsets.all(4),
-                constraints: const BoxConstraints(),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 16),
-                onPressed: () => _deleteSite(site),
-                color: AppTheme.danger,
-                padding: const EdgeInsets.all(4),
-                constraints: const BoxConstraints(),
-              ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
