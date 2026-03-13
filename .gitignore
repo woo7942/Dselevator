@@ -1,0 +1,13 @@
+lib/
+android/
+ios/
+build/
+test/
+web/
+api_server/
+.dart_tool/
+.packages
+pubspec.yaml
+pubspec.lock
+analysis_options.yaml
+README.md
