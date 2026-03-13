@@ -477,7 +477,10 @@ class _SitesScreenState extends State<SitesScreen> {
   }
 
   Widget _buildSiteCard(Site site) {
-    final elevCnt = site.elevatorCount ?? site.totalElevators;
+    // elevator_count=0이면 total_elevators 사용 (실제 등록 승강기 없을 때 계약대수 표시)
+    final elevCnt = (site.elevatorCount != null && site.elevatorCount! > 0)
+        ? site.elevatorCount!
+        : site.totalElevators;
     final isSelected = _selectedIds.contains(site.id);
     final teamColor = site.team != null ? _teamColor(site.team!) : null;
     final teamBg = site.team != null ? _teamBgColor(site.team!) : null;
