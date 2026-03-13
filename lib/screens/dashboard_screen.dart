@@ -432,104 +432,135 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final issuesTotal = (issues?['total'] as num?)?.toInt() ?? 0;
     final issuesCritical = (issues?['critical'] as num?)?.toInt() ?? 0;
 
-    final kpis = [
-      _KpiData(
-        icon: Icons.business,
-        iconBg: AppTheme.infoLight,
-        iconColor: AppTheme.info,
-        value: '${d.sites}',
-        label: '관리 현장',
-        subLabel: '운영중',
-        subColor: AppTheme.success,
-        subBg: AppTheme.successLight,
-      ),
-      _KpiData(
-        icon: Icons.elevator,
-        iconBg: AppTheme.primaryLight,
-        iconColor: AppTheme.primary,
-        value: '$elevatorsCount',
-        label: '관리 승강기',
-        subLabel: faultCount > 0 ? '고장 ${faultCount}대' : '정상',
-        subColor: faultCount > 0 ? AppTheme.danger : AppTheme.gray400,
-        subBg: faultCount > 0 ? AppTheme.dangerLight : AppTheme.gray100,
-        extraLabel: warningCount > 0 ? '주의 ${warningCount}대' : null,
-        extraColor: AppTheme.warning,
-      ),
-      _KpiData(
-        icon: Icons.warning_amber,
-        iconBg: AppTheme.dangerLight,
-        iconColor: AppTheme.danger,
-        value: '$issuesTotal',
-        label: '지적사항 미조치',
-        subLabel: '미조치',
-        subColor: AppTheme.danger,
-        subBg: AppTheme.dangerLight,
-        extraLabel: issuesCritical > 0 ? '중결함 ${issuesCritical}건' : null,
-        extraColor: AppTheme.danger,
-      ),
-      _KpiData(
-        icon: Icons.calendar_today,
-        iconBg: AppTheme.warningLight,
-        iconColor: AppTheme.warning,
-        value: '${d.upcomingInspections}',
-        label: '검사 예정',
-        subLabel: '30일 이내',
-        subColor: AppTheme.warning,
-        subBg: AppTheme.warningLight,
-      ),
-    ];
-
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 10,
-      mainAxisSpacing: 10,
-      childAspectRatio: 1.6,
-      children: kpis.map((kpi) => _buildKpiCard(kpi)).toList(),
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(child: _buildKpiCard(_KpiData(
+              icon: Icons.business,
+              iconBg: AppTheme.infoLight,
+              iconColor: AppTheme.info,
+              value: '${d.sites}',
+              label: '관리 현장',
+              subLabel: '운영중',
+              subColor: AppTheme.success,
+              subBg: AppTheme.successLight,
+            ))),
+            const SizedBox(width: 10),
+            Expanded(child: _buildKpiCard(_KpiData(
+              icon: Icons.elevator,
+              iconBg: AppTheme.primaryLight,
+              iconColor: AppTheme.primary,
+              value: '$elevatorsCount',
+              label: '관리 승강기',
+              subLabel: faultCount > 0 ? '고장 $faultCount대' : '정상',
+              subColor: faultCount > 0 ? AppTheme.danger : AppTheme.success,
+              subBg: faultCount > 0 ? AppTheme.dangerLight : AppTheme.successLight,
+              extraLabel: warningCount > 0 ? '주의 $warningCount대' : null,
+              extraColor: AppTheme.warning,
+            ))),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(child: _buildKpiCard(_KpiData(
+              icon: Icons.warning_amber,
+              iconBg: AppTheme.dangerLight,
+              iconColor: AppTheme.danger,
+              value: '$issuesTotal',
+              label: '지적사항 미조치',
+              subLabel: issuesCritical > 0 ? '중결함 $issuesCritical건' : '미조치',
+              subColor: AppTheme.danger,
+              subBg: AppTheme.dangerLight,
+              extraLabel: issuesCritical == 0 && issuesTotal == 0 ? '이상없음' : null,
+              extraColor: AppTheme.success,
+            ))),
+            const SizedBox(width: 10),
+            Expanded(child: _buildKpiCard(_KpiData(
+              icon: Icons.calendar_today,
+              iconBg: AppTheme.warningLight,
+              iconColor: AppTheme.warning,
+              value: '${d.upcomingInspections}',
+              label: '검사 예정',
+              subLabel: '30일 이내',
+              subColor: d.upcomingInspections > 0 ? AppTheme.warning : AppTheme.gray400,
+              subBg: d.upcomingInspections > 0 ? AppTheme.warningLight : AppTheme.gray100,
+            ))),
+          ],
+        ),
+      ],
     );
   }
 
   Widget _buildKpiCard(_KpiData kpi) {
     return InfoCard(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
                   color: kpi.iconBg,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(kpi.icon, color: kpi.iconColor, size: 18),
+                child: Icon(kpi.icon, color: kpi.iconColor, size: 16),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: kpi.subBg,
-                  borderRadius: BorderRadius.circular(20),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: kpi.subBg,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    kpi.subLabel,
+                    style: TextStyle(fontSize: 10, color: kpi.subColor, fontWeight: FontWeight.w500),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                child: Text(kpi.subLabel,
-                  style: TextStyle(fontSize: 10, color: kpi.subColor, fontWeight: FontWeight.w500)),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(kpi.value,
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.gray800)),
-          Text(kpi.label,
-            style: const TextStyle(fontSize: 11, color: AppTheme.gray500)),
-          if (kpi.extraLabel != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(kpi.extraLabel!,
-                style: TextStyle(fontSize: 10, color: kpi.extraColor, fontWeight: FontWeight.w500)),
+          Text(
+            kpi.value,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.gray800),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            kpi.label,
+            style: const TextStyle(fontSize: 12, color: AppTheme.gray500),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (kpi.extraLabel != null) ...[
+            const SizedBox(height: 3),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: (kpi.extraColor ?? AppTheme.warning).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                kpi.extraLabel!,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: kpi.extraColor ?? AppTheme.warning,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
+          ],
         ],
       ),
     );
@@ -552,34 +583,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final issuesCritical = (issues?['critical'] as num?)?.toInt() ?? 0;
     final issuesMinor = (issues?['minor'] as num?)?.toInt() ?? 0;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
       children: [
-        Expanded(child: _buildDonutCard(
-          icon: Icons.calendar_month,
-          iconColor: const Color(0xFF8B5CF6),
-          title: '이번달 월점검',
-          done: monthlyDone,
-          total: monthlyTotal,
-          pct: monthlyPct,
-          color: AppTheme.primary,
-        )),
-        const SizedBox(width: 10),
-        Expanded(child: _buildDonutCard(
-          icon: Icons.memory,
-          iconColor: const Color(0xFFF59E0B),
-          title: '이번 분기점검',
-          done: quarterlyDone,
-          total: quarterlyTotal,
-          pct: quarterlyPct,
-          color: const Color(0xFFF59E0B),
-        )),
-        const SizedBox(width: 10),
-        Expanded(child: _buildIssueStatsCard(
+        // 점검 현황 행
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _buildDonutCard(
+              icon: Icons.calendar_month,
+              iconColor: const Color(0xFF8B5CF6),
+              title: '이번달 월점검',
+              done: monthlyDone,
+              total: monthlyTotal,
+              pct: monthlyPct,
+              color: AppTheme.primary,
+            )),
+            const SizedBox(width: 10),
+            Expanded(child: _buildDonutCard(
+              icon: Icons.memory,
+              iconColor: const Color(0xFFF59E0B),
+              title: '이번 분기점검',
+              done: quarterlyDone,
+              total: quarterlyTotal,
+              pct: quarterlyPct,
+              color: const Color(0xFFF59E0B),
+            )),
+          ],
+        ),
+        const SizedBox(height: 10),
+        // 지적사항 현황 (전체 너비)
+        _buildIssueStatsCard(
           total: issuesTotal,
           critical: issuesCritical,
           minor: issuesMinor,
-        )),
+        ),
       ],
     );
   }
@@ -653,17 +690,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.task_alt, size: 14, color: AppTheme.primary),
-              SizedBox(width: 4),
-              Text('지적사항 현황', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.gray700)),
+              const Icon(Icons.task_alt, size: 14, color: AppTheme.primary),
+              const SizedBox(width: 4),
+              const Text('지적사항 현황',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.gray700)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: total > 0 ? AppTheme.dangerLight : AppTheme.successLight,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '총 $total건',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: total > 0 ? AppTheme.danger : AppTheme.success,
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
-          _buildProgressRow('중결함', critical, total, AppTheme.danger),
-          const SizedBox(height: 6),
-          _buildProgressRow('경결함', minor, total, AppTheme.warning),
+          Row(
+            children: [
+              Expanded(child: _buildProgressRow('중결함', critical, total, AppTheme.danger)),
+              const SizedBox(width: 12),
+              Expanded(child: _buildProgressRow('경결함', minor, total, AppTheme.warning)),
+            ],
+          ),
         ],
       ),
     );
@@ -671,23 +729,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildProgressRow(String label, int count, int total, Color color) {
     final pct = total > 0 ? count / total : 0.0;
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(width: 40, child: Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.gray600))),
-        const SizedBox(width: 6),
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(3),
-            child: LinearProgressIndicator(
-              value: pct,
-              backgroundColor: AppTheme.gray200,
-              valueColor: AlwaysStoppedAnimation<Color>(color),
-              minHeight: 6,
-            ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+            Text('$count건', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
+            value: pct,
+            backgroundColor: AppTheme.gray200,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+            minHeight: 6,
           ),
         ),
-        const SizedBox(width: 6),
-        Text('$count건', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: color)),
       ],
     );
   }
