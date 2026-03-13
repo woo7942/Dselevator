@@ -1,32 +1,39 @@
 # Flutter/Dart
-# Build outputs (exclude to save space)
-/build/
-/.dart_tool/
+.dart_tool/
 .packages
-.pub-cache/
-.pub/
+build/
+*.lock
+!pubspec.lock
 
 # IDE
-.vscode/
 .idea/
+.vscode/
 *.iml
 
-# OS Files
-.DS_Store
-Thumbs.db
+# Android
+**/android/**/gradle-wrapper.jar
+**/android/.gradle/
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
 
-# Logs
-*.log
+# iOS
+**/ios/.generated/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
 
-# Temporary files
-*.tmp
-*.temp
+# macOS
+**/macos/Flutter/GeneratedPluginRegistrant.swift
 
-# Keep lib/ directory for source code!
-
-
-# API Server
-api_server/node_modules/
-api_server/*.db
-api_server/*.db-shm
-api_server/*.db-wal
+# Web build output (not for source branch)
+# build/web (keep for reference but not commit)
