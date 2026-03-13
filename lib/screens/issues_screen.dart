@@ -1,13 +1,11 @@
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:ui_web' as ui_web;
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:js_interop';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
-import 'package:web/web.dart' as web;
+import '../utils/platform_stub.dart'
+    if (dart.library.js_interop) '../utils/platform_web.dart' as platform;
 import '../utils/theme.dart';
 import '../utils/image_picker_web.dart' if (dart.library.io) '../utils/image_picker_native.dart' as img_picker;
 import '../utils/image_picker_util.dart';
@@ -3754,22 +3752,17 @@ class _ActionFormSheetState extends State<ActionFormSheet> {
   }
 
   void _showVideoPlayer(String fullUrl, String fileName) {
+    if (!kIsWeb) {
+      // 네이티브에서는 HtmlElementView 불가 - 간단한 메시지 표시
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('동영상 재생은 웹에서만 지원됩니다')),
+      );
+      return;
+    }
     // HTML5 video 태그를 HtmlElementView로 삽입
     const viewType = 'video-player-view';
-    // ignore: undefined_prefixed_name
-    ui_web.platformViewRegistry.registerViewFactory(
-      '${viewType}_${fullUrl.hashCode}',
-      (int viewId) {
-        final video = web.HTMLVideoElement()
-          ..src = fullUrl
-          ..controls = true
-          ..style.width = '100%'
-          ..style.height = '100%'
-          ..style.borderRadius = '12px'
-          ..style.backgroundColor = '#000';
-        return video;
-      },
-    );
+    final viewKey = '${viewType}_${fullUrl.hashCode}';
+    platform.registerRemoteVideoFactory(viewKey, fullUrl);
 
     showDialog(
       context: context,
@@ -3808,7 +3801,7 @@ class _ActionFormSheetState extends State<ActionFormSheet> {
                 color: Colors.black,
                 borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
               ),
-              child: HtmlElementView(viewType: '${viewType}_${fullUrl.hashCode}'),
+              child: HtmlElementView(viewType: viewKey),
             ),
           ],
         ),
@@ -3845,29 +3838,20 @@ class _ActionFormSheetState extends State<ActionFormSheet> {
     );
   }
 
-  // 로컬 동영상 미리보기 (업로드 전 - Blob URL 사용)
+  // 로컬 동영상 미리보기 (업로드 전 - Blob URL 사용, 웹 전용)
   void _previewLocalVideo(_MediaItem item) {
+    if (!kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('동영상 미리보기는 웹에서만 지원됩니다')),
+      );
+      return;
+    }
     // Blob URL 생성: bytes → Blob → object URL
     final mime = _localVideoMime(item.fileName);
-    final blob = web.Blob(
-      [item.bytes.toJS].toJS,
-      web.BlobPropertyBag(type: mime),
-    );
-    final blobUrl = web.URL.createObjectURL(blob);
+    final blobUrl = platform.createBlobUrl(item.bytes, mime);
     final viewKey = 'local-video-${item.fileName.hashCode}-${DateTime.now().millisecondsSinceEpoch}';
 
-    // ignore: undefined_prefixed_name
-    ui_web.platformViewRegistry.registerViewFactory(viewKey, (int _) {
-      final video = web.HTMLVideoElement()
-        ..src = blobUrl
-        ..controls = true
-        ..autoplay = true
-        ..style.width = '100%'
-        ..style.height = '100%'
-        ..style.borderRadius = '0 0 12px 12px'
-        ..style.backgroundColor = '#000';
-      return video;
-    });
+    platform.registerVideoViewFactory(viewKey, blobUrl);
 
     showDialog(
       context: context,
@@ -3897,7 +3881,6 @@ class _ActionFormSheetState extends State<ActionFormSheet> {
               ])),
               GestureDetector(
                 onTap: () {
-                  web.URL.revokeObjectURL(blobUrl); // 메모리 해제
                   Navigator.pop(context);
                 },
                 child: const Icon(Icons.close, color: Colors.white, size: 20),
@@ -3915,10 +3898,7 @@ class _ActionFormSheetState extends State<ActionFormSheet> {
           ),
         ]),
       ),
-    ).then((_) {
-      // 다이얼로그 닫힐 때 Blob URL 해제 (혹시 닫기 버튼 외 방법으로 닫힌 경우)
-      try { web.URL.revokeObjectURL(blobUrl); } catch (_) {}
-    });
+    );
   }
 
   static String _localVideoMime(String filename) {
