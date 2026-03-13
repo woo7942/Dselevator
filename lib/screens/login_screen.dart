@@ -52,6 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   /// 서버 주소 변경 다이얼로그
   Future<void> _changeServer() async {
+    const defaultUrl = 'https://elevator-api-4lac.onrender.com';
     final ctrl = TextEditingController(text: ApiService.baseUrl);
     bool saving = false;
     bool testing = false;
@@ -83,6 +84,23 @@ class _LoginScreenState extends State<LoginScreen> {
                   hintText: 'http://192.168.1.100:8787',
                   prefixIcon: const Icon(Icons.link, size: 18),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    ctrl.text = defaultUrl;
+                    setS(() { testMsg = null; testOk = false; });
+                  },
+                  icon: const Icon(Icons.cloud_outlined, size: 14),
+                  label: const Text('☁️ 기본(클라우드) 서버로 변경', style: TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.green[700],
+                    side: BorderSide(color: Colors.green[400]!),
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                  ),
                 ),
               ),
               if (testMsg != null) ...[
