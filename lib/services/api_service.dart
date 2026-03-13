@@ -11,7 +11,7 @@ import '../models/inspection.dart';
 import '../models/check.dart';
 
 class ApiService {
-  static String _baseUrl = '';
+  static String _baseUrl = 'https://elevator-api-4lac.onrender.com'; // 초기값을 기본 URL로 설정
   static const String _baseUrlKey = 'api_base_url';
 
   // 기본 서버 주소 (Render 배포 서버)
@@ -44,12 +44,14 @@ class ApiService {
   static bool get needsSetup => false; // 기본 주소가 있으므로 항상 false
 
   static Future<void> setBaseUrl(String url) async {
-    _baseUrl = url.trimRight().replaceAll(RegExp(r'/$'), '');
+    final trimmed = url.trimRight().replaceAll(RegExp(r'/$'), '');
+    // 빈 문자열이거나 http로 시작 안하면 기본값 사용
+    _baseUrl = (trimmed.isEmpty || !trimmed.startsWith('http')) ? _defaultUrl : trimmed;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_baseUrlKey, _baseUrl);
   }
 
-  static String get baseUrl => _baseUrl;
+  static String get baseUrl => _baseUrl.isEmpty ? _defaultUrl : _baseUrl;
 
   // 서버 응답에서 리스트 추출 (results 또는 data 키 모두 처리)
   static List<dynamic> _extractList(Map<String, dynamic> res) {
