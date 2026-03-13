@@ -59,9 +59,26 @@ class DashboardScreenState extends State<DashboardScreen> {
     } catch (_) {} // 조용히 실패 (사용자 방해 없이)
   }
 
+  String _loadingMessage = '데이터를 불러오는 중...';
+
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+      _loadingMessage = '서버에 연결 중...';
+    });
     try {
+      // 서버 콜드스타트 알림 (3초 후)
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted && _loading) {
+          setState(() => _loadingMessage = '서버 시작 중입니다. 잠시 기다려주세요...');
+        }
+      });
+      Future.delayed(const Duration(seconds: 10), () {
+        if (mounted && _loading) {
+          setState(() => _loadingMessage = '서버 응답 대기 중 (최대 30초)...');
+        }
+      });
       final data = await ApiService.getDashboard(
         team: _selectedTeam != '전체' ? _selectedTeam : null,
       );
@@ -109,7 +126,7 @@ class DashboardScreenState extends State<DashboardScreen> {
           // 콘텐츠
           Expanded(
             child: _loading
-                ? const LoadingWidget()
+                ? _buildLoadingState()
                 : _error != null
                     ? ErrorWidget2(message: _error!, onRetry: _load)
                     : _buildDashboard(),
@@ -201,6 +218,46 @@ class DashboardScreenState extends State<DashboardScreen> {
       case '파주2팀': return const Color(0xFFF3E5F5);
       default: return AppTheme.primaryLight;
     }
+  }
+
+  Widget _buildLoadingState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(
+              width: 48,
+              height: 48,
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primary),
+                strokeWidth: 3,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              _loadingMessage,
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppTheme.gray500,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Render 무료 서버는 처음 접속 시\n최대 30초가 소요될 수 있습니다',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.gray400,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildDashboard() {

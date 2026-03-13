@@ -31,7 +31,13 @@ class ApiService {
 
   static Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
-    _baseUrl = prefs.getString(_baseUrlKey) ?? _defaultUrl;
+    final saved = prefs.getString(_baseUrlKey) ?? '';
+    // 저장된 URL이 비어있거나 유효하지 않으면 기본 URL 사용
+    if (saved.isEmpty || !saved.startsWith('http')) {
+      _baseUrl = _defaultUrl;
+    } else {
+      _baseUrl = saved;
+    }
   }
 
   /// 저장된 서버 주소가 없으면 true → 설정 화면 표시 필요
@@ -59,31 +65,43 @@ class ApiService {
         ?? {};
   }
 
-  static Future<Map<String, dynamic>> _get(String path, {Map<String, String>? params}) async {
-    try {
-      var uri = Uri.parse('$_baseUrl$path');
-      if (params != null && params.isNotEmpty) {
-        uri = uri.replace(queryParameters: params);
+  static Future<Map<String, dynamic>> _get(String path, {Map<String, String>? params, int retries = 2}) async {
+    // URL이 비어있으면 기본값 사용
+    final url = _baseUrl.isEmpty ? _defaultUrl : _baseUrl;
+    for (int attempt = 0; attempt <= retries; attempt++) {
+      try {
+        var uri = Uri.parse('$url$path');
+        if (params != null && params.isNotEmpty) {
+          uri = uri.replace(queryParameters: params);
+        }
+        // 첫 번째 시도는 30초 (콜드 스타트 대비), 이후 15초
+        final timeout = attempt == 0 ? const Duration(seconds: 30) : const Duration(seconds: 15);
+        final response = await http.get(uri, headers: {'Content-Type': 'application/json'})
+            .timeout(timeout);
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          return json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        }
+        throw ApiException('HTTP \${response.statusCode}: \${response.body}');
+      } catch (e) {
+        if (e is ApiException) rethrow;
+        if (attempt < retries) {
+          await Future.delayed(Duration(seconds: attempt + 1)); // 재시도 전 대기
+          continue;
+        }
+        throw ApiException('네트워크 오류: \$e');
       }
-      final response = await http.get(uri, headers: {'Content-Type': 'application/json'})
-          .timeout(const Duration(seconds: 15));
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-      }
-      throw ApiException('HTTP ${response.statusCode}: ${response.body}');
-    } catch (e) {
-      if (e is ApiException) rethrow;
-      throw ApiException('네트워크 오류: $e');
     }
+    throw ApiException('요청 실패');
   }
 
   static Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
+    final url = _baseUrl.isEmpty ? _defaultUrl : _baseUrl;
     try {
-      final uri = Uri.parse('$_baseUrl$path');
+      final uri = Uri.parse('$url$path');
       final response = await http.post(uri,
           headers: {'Content-Type': 'application/json'},
           body: json.encode(body))
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 20));
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       }
@@ -95,12 +113,13 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> _put(String path, Map<String, dynamic> body) async {
+    final url = _baseUrl.isEmpty ? _defaultUrl : _baseUrl;
     try {
-      final uri = Uri.parse('$_baseUrl$path');
+      final uri = Uri.parse('$url$path');
       final response = await http.put(uri,
           headers: {'Content-Type': 'application/json'},
           body: json.encode(body))
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 20));
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       }
@@ -112,12 +131,13 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> _patch(String path, Map<String, dynamic> body) async {
+    final url = _baseUrl.isEmpty ? _defaultUrl : _baseUrl;
     try {
-      final uri = Uri.parse('$_baseUrl$path');
+      final uri = Uri.parse('$url$path');
       final response = await http.patch(uri,
           headers: {'Content-Type': 'application/json'},
           body: json.encode(body))
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 20));
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       }
@@ -129,10 +149,11 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> _delete(String path) async {
+    final url = _baseUrl.isEmpty ? _defaultUrl : _baseUrl;
     try {
-      final uri = Uri.parse('$_baseUrl$path');
+      final uri = Uri.parse('$url$path');
       final response = await http.delete(uri, headers: {'Content-Type': 'application/json'})
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 20));
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       }
