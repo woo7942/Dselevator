@@ -9,7 +9,8 @@ import '../utils/theme.dart';
 //  - 저장 성공 시 _RootRouter가 자동으로 LoginScreen으로 전환
 // ─────────────────────────────────────────────────────────────────
 class ServerSetupScreen extends StatefulWidget {
-  const ServerSetupScreen({super.key});
+  final VoidCallback? onSaved;
+  const ServerSetupScreen({super.key, this.onSaved});
 
   @override
   State<ServerSetupScreen> createState() => _ServerSetupScreenState();
@@ -68,8 +69,9 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
     setState(() => _saving = true);
     try {
       await ApiService.setBaseUrl(url);
-      // needsSetup이 false가 되면 _RootRouter가 자동으로 LoginScreen으로 이동
-      if (mounted) setState(() {}); // rebuild 트리거
+      // 상위 _RootRouter에 알려서 rebuild 유도
+      widget.onSaved?.call();
+      if (mounted) setState(() {});
     } catch (e) {
       if (mounted) _show('저장 실패: $e', isError: true);
     } finally {

@@ -43,26 +43,39 @@ class ElevatorManagerApp extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  최상위 라우터: 서버 설정 → 로그인 → 메인 순서로 화면 결정
+//  최상위 라우터 (StatefulWidget: ApiService.needsSetup 변화 감지)
+//  흐름: 서버설정 미완료 → ServerSetupScreen
+//        서버설정 완료 + 미로그인 → LoginScreen
+//        로그인 완료 → MainScreen
 // ─────────────────────────────────────────────────────────────────
-class _RootRouter extends StatelessWidget {
+class _RootRouter extends StatefulWidget {
   const _RootRouter();
+
+  @override
+  State<_RootRouter> createState() => _RootRouterState();
+}
+
+class _RootRouterState extends State<_RootRouter> {
+  /// ServerSetupScreen에서 저장 완료 시 이 콜백으로 setState 유도
+  void _onServerSaved() {
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
 
-    // 1단계: API 서버 주소가 설정되어 있지 않으면 서버 설정 화면
+    // 1단계: 서버 주소 미설정 → 서버 설정 화면
     if (ApiService.needsSetup) {
-      return const ServerSetupScreen();
+      return ServerSetupScreen(onSaved: _onServerSaved);
     }
 
-    // 2단계: 로그인 안 되어 있으면 로그인 화면
+    // 2단계: 로그인 안 됨 → 로그인 화면
     if (!auth.isLoggedIn) {
-      return const LoginScreen();
+      return LoginScreen(onServerChange: _onServerSaved);
     }
 
-    // 3단계: 로그인 완료 → 메인 화면
+    // 3단계: 로그인 완료 → 메인
     return const MainScreen();
   }
 }
