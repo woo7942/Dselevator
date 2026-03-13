@@ -14,13 +14,16 @@ class ApiService {
   static String _baseUrl = '';
   static const String _baseUrlKey = 'api_base_url';
 
+  // 기본 서버 주소 (Render 배포 서버)
+  static const String _defaultUrl = 'https://elevator-api-4lac.onrender.com';
+
   static Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
-    _baseUrl = prefs.getString(_baseUrlKey) ?? '';
+    _baseUrl = prefs.getString(_baseUrlKey) ?? _defaultUrl;
   }
 
   /// 저장된 서버 주소가 없으면 true → 설정 화면 표시 필요
-  static bool get needsSetup => _baseUrl.isEmpty;
+  static bool get needsSetup => false; // 기본 주소가 있으므로 항상 false
 
   static Future<void> setBaseUrl(String url) async {
     _baseUrl = url.trimRight().replaceAll(RegExp(r'/$'), '');
