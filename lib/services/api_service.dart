@@ -13,12 +13,14 @@ import '../models/check.dart';
 class ApiService {
   static String _baseUrl = '';
   static const String _baseUrlKey = 'api_base_url';
-  static const String _defaultUrl = 'https://8787-itvxovwjc5r0tvfptlnxw-b32ec7bb.sandbox.novita.ai';
 
   static Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
-    _baseUrl = prefs.getString(_baseUrlKey) ?? _defaultUrl;
+    _baseUrl = prefs.getString(_baseUrlKey) ?? '';
   }
+
+  /// 저장된 서버 주소가 없으면 true → 설정 화면 표시 필요
+  static bool get needsSetup => _baseUrl.isEmpty;
 
   static Future<void> setBaseUrl(String url) async {
     _baseUrl = url.trimRight().replaceAll(RegExp(r'/$'), '');
@@ -133,11 +135,12 @@ class ApiService {
   }
 
   // ── 현장 ──────────────────────────────────────────────────
-  static Future<List<Site>> getSites({String? search, String? status, String? region}) async {
+  static Future<List<Site>> getSites({String? search, String? status, String? region, String? team}) async {
     final params = <String, String>{};
     if (search != null && search.isNotEmpty) params['search'] = search;
     if (status != null && status.isNotEmpty) params['status'] = status;
     if (region != null && region != '전체') params['region'] = region;
+    if (team != null && team.isNotEmpty && team != '전체') params['team'] = team;
     final res = await _get('/api/sites', params: params);
     final data = _extractList(res);
     return data.map((e) => Site.fromJson(e as Map<String, dynamic>)).toList();
@@ -499,6 +502,83 @@ class ApiService {
 
   static Future<void> deleteQuarterlyCheck(int id) async {
     await _delete('/api/quarterly/$id');
+  }
+
+  // ── 팀 관련 ────────────────────────────────────────────────
+  static Future<List<String>> getTeams() async {
+    final res = await _get('/api/teams');
+    final list = _extractList(res);
+    return list.map((e) => e.toString()).toList();
+  }
+
+  static Future<void> addTeam(String name) async {
+    await _post('/api/teams', {'name': name});
+  }
+
+  // ── 사용자 관리 ─────────────────────────────────────────────
+  static Future<List<dynamic>> getUsers() async {
+    final res = await _get('/api/users');
+    return _extractList(res);
+  }
+
+  static Future<void> createUser(String name, String pin, String role) async {
+    await _post('/api/users', {'name': name, 'pin': pin, 'role': role});
+  }
+
+  static Future<void> updateUser(int id, {String? name, String? pin, String? role, int? isActive, String? tabPermissions}) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (pin != null) body['pin'] = pin;
+    if (role != null) body['role'] = role;
+    if (isActive != null) body['is_active'] = isActive;
+    if (tabPermissions != null) body['tab_permissions'] = tabPermissions;
+    await _put('/api/users/$id', body);
+  }
+
+  static Future<void> deleteUser(int id) async {
+    await _delete('/api/users/$id');
+  }
+
+  // ── 외부 URI 헬퍼 ───────────────────────────────────────────
+  static Future<Map<String, dynamic>> postRaw(Uri uri, Map<String, dynamic> body) async {
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    ).timeout(const Duration(seconds: 15));
+    final decoded = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    if (response.statusCode >= 200 && response.statusCode < 300) return decoded;
+    throw ApiException(decoded['error']?.toString() ?? 'HTTP ${response.statusCode}');
+  }
+
+  static Future<Map<String, dynamic>> getRaw(Uri uri) async {
+    final response = await http.get(uri,
+      headers: {'Content-Type': 'application/json'},
+    ).timeout(const Duration(seconds: 15));
+    final decoded = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    if (response.statusCode >= 200 && response.statusCode < 300) return decoded;
+    throw ApiException(decoded['error']?.toString() ?? 'HTTP ${response.statusCode}');
+  }
+
+  static Future<Map<String, dynamic>> putRaw(Uri uri, Map<String, dynamic> body) async {
+    final response = await http.put(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    ).timeout(const Duration(seconds: 15));
+    final decoded = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    if (response.statusCode >= 200 && response.statusCode < 300) return decoded;
+    throw ApiException(decoded['error']?.toString() ?? 'HTTP ${response.statusCode}');
+  }
+
+  static Future<void> deleteRaw(Uri uri) async {
+    final response = await http.delete(uri,
+      headers: {'Content-Type': 'application/json'},
+    ).timeout(const Duration(seconds: 15));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      throw ApiException(decoded['error']?.toString() ?? 'HTTP ${response.statusCode}');
+    }
   }
 }
 

@@ -131,9 +131,8 @@ class AuthService extends ChangeNotifier {
   Future<String?> deleteUser(int userId) async {
     try {
       final uri = Uri.parse('${ApiService.baseUrl}/api/users/$userId');
-      final resp = await ApiService.deleteRaw(uri);
-      if (resp['success'] == true) return null;
-      return resp['error']?.toString() ?? '삭제 실패';
+      await ApiService.deleteRaw(uri);
+      return null; // 성공
     } catch (e) {
       return '서버 오류: $e';
     }

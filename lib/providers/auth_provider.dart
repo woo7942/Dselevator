@@ -91,7 +91,8 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await ApiService.login(name, pin);
+      final uri = Uri.parse('${ApiService.baseUrl}/api/auth/login');
+      final result = await ApiService.postRaw(uri, {'name': name.trim(), 'pin': pin.trim()});
       _currentUser = UserInfo.fromJson(result['user'] as Map<String, dynamic>);
       _isLoading = false;
       notifyListeners();

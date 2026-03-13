@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../utils/theme.dart';
 import '../widgets/common_widgets.dart';
 import '../services/api_service.dart';
@@ -14,18 +15,114 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final _urlCtrl = TextEditingController(text: ApiService.baseUrl);
   bool _saving = false;
   bool _testing = false;
+  bool _testSuccess = false;
   String? _testResult;
+
+  @override
+  void dispose() {
+    _urlCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _testConnection() async {
+    final url = _urlCtrl.text.trim();
+    if (url.isEmpty) {
+      showToast(context, '서버 주소를 입력하세요.', isError: true);
+      return;
+    }
+    setState(() {
+      _testing = true;
+      _testResult = null;
+      _testSuccess = false;
+    });
+    try {
+      await ApiService.setBaseUrl(url);
+      await ApiService.getDashboard();
+      if (mounted) {
+        setState(() {
+          _testResult = '✅ 연결 성공! 서버에 정상 접속되었습니다.';
+          _testSuccess = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _testResult = '❌ 연결 실패: 주소를 다시 확인해 주세요.';
+          _testSuccess = false;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
+  Future<void> _saveUrl() async {
+    final url = _urlCtrl.text.trim();
+    if (url.isEmpty) {
+      showToast(context, '서버 주소를 입력하세요.', isError: true);
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ApiService.setBaseUrl(url);
+      if (mounted) {
+        showToast(context, 'API 서버 주소가 저장되었습니다. 잠시 후 새로고침 해주세요.');
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) showToast(context, e.toString(), isError: true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  /// 서버 주소 초기화 (미설정 상태로 되돌리기)
+  Future<void> _resetUrl() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('서버 주소 초기화'),
+        content: const Text('저장된 API 서버 주소를 삭제하시겠습니까?\n앱 재시작 시 서버 설정 화면이 표시됩니다.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.danger, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('초기화'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    await ApiService.setBaseUrl('');
+    if (mounted) {
+      showToast(context, '서버 주소가 초기화되었습니다.');
+      setState(() => _urlCtrl.text = '');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('설정')),
+      backgroundColor: AppTheme.gray50,
+      appBar: AppBar(
+        title: const Text('설정'),
+        actions: [
+          // 초기화 버튼
+          IconButton(
+            icon: const Icon(Icons.restart_alt, size: 20),
+            tooltip: '서버 주소 초기화',
+            onPressed: _resetUrl,
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // API 서버 설정
+            // ── API 서버 설정 ─────────────────────────────────────
             InfoCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -35,45 +132,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Icon(Icons.dns_outlined, color: AppTheme.primary, size: 18),
                       SizedBox(width: 8),
                       Text('API 서버 설정',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.gray800)),
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.gray800)),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  const Text('승강기 관리 백엔드 API 서버 주소를 입력하세요.',
-                    style: TextStyle(fontSize: 12, color: AppTheme.gray500)),
-                  const SizedBox(height: 12),
+                  Text(
+                    '백엔드 서버(Node.js, 포트 8787)가 실행 중인 주소를 입력하세요.',
+                    style: TextStyle(fontSize: 12, color: AppTheme.gray500),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // URL 입력
                   TextField(
                     controller: _urlCtrl,
-                    decoration: const InputDecoration(
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                    ],
+                    decoration: InputDecoration(
                       labelText: 'API 서버 URL',
-                      hintText: 'https://8787-itvxovwjc5r0tvfptlnxw-b32ec7bb.sandbox.novita.ai',
-                      prefixIcon: Icon(Icons.link, size: 18),
+                      hintText: 'http://192.168.1.100:8787',
+                      prefixIcon: const Icon(Icons.link, size: 18),
+                      suffixIcon: _urlCtrl.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 16),
+                              onPressed: () => setState(() => _urlCtrl.clear()),
+                            )
+                          : null,
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: 6),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Text(
+                      '예) http://192.168.0.10:8787  또는  https://내도메인.com',
+                      style: TextStyle(fontSize: 11, color: AppTheme.gray400),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  if (_testResult != null)
-                    Container(
-                      padding: const EdgeInsets.all(10),
+
+                  // 테스트 결과
+                  if (_testResult != null) ...[
+                    const SizedBox(height: 10),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
-                        color: _testResult!.startsWith('✅') ? AppTheme.successLight : AppTheme.dangerLight,
+                        color: _testSuccess ? AppTheme.successLight : AppTheme.dangerLight,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         _testResult!,
                         style: TextStyle(
                           fontSize: 12,
-                          color: _testResult!.startsWith('✅') ? AppTheme.success : AppTheme.danger,
+                          color: _testSuccess ? AppTheme.success : AppTheme.danger,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
-                  const SizedBox(height: 12),
+                  ],
+
+                  const SizedBox(height: 14),
+                  // 버튼 행
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: _testing ? null : _testConnection,
+                          onPressed: (_testing || _saving) ? null : _testConnection,
                           icon: _testing
-                              ? const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                              ? const SizedBox(
+                                  height: 14, width: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2))
                               : const Icon(Icons.wifi_tethering, size: 16),
                           label: const Text('연결 테스트'),
                           style: OutlinedButton.styleFrom(
@@ -85,9 +219,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: _saving ? null : _saveUrl,
+                          onPressed: (_testing || _saving) ? null : _saveUrl,
                           icon: _saving
-                              ? const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              ? const SizedBox(
+                                  height: 14, width: 14,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white))
                               : const Icon(Icons.save_outlined, size: 16),
                           label: const Text('저장'),
                         ),
@@ -99,7 +236,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 16),
 
-            // 앱 정보
+            // ── 현재 연결 상태 ────────────────────────────────────
+            _ConnectionStatusCard(),
+            const SizedBox(height: 16),
+
+            // ── 앱 정보 ──────────────────────────────────────────
             InfoCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -109,20 +250,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Icon(Icons.info_outline, color: AppTheme.gray400, size: 18),
                       SizedBox(width: 8),
                       Text('앱 정보',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.gray800)),
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.gray800)),
                     ],
                   ),
                   const Divider(height: 20),
                   _infoRow('앱 이름', '승강기 현장 관리 시스템'),
                   _infoRow('버전', 'v1.0.0'),
-                  _infoRow('개발', 'Elevator Manager Team'),
-                  _infoRow('현장/승강기 관리', '검사 이력 및 점검 기록 관리'),
+                  _infoRow('플랫폼', 'Web / Android'),
+                  _infoRow('기능', '현장·승강기 관리, 검사·점검 기록'),
                 ],
               ),
             ),
             const SizedBox(height: 16),
 
-            // 빠른 도움말
+            // ── 사용 방법 ─────────────────────────────────────────
             InfoCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -132,11 +276,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Icon(Icons.help_outline, color: AppTheme.info, size: 18),
                       SizedBox(width: 8),
                       Text('사용 방법',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.gray800)),
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.gray800)),
                     ],
                   ),
                   const Divider(height: 20),
-                  _helpRow(Icons.dns, '1. 위 API 서버 URL에 백엔드 서버 주소를 입력하세요'),
+                  _helpRow(Icons.dns, '1. API 서버 URL 입력 후 저장하세요'),
                   _helpRow(Icons.business, '2. 현장 관리에서 건물/현장을 등록하세요'),
                   _helpRow(Icons.elevator, '3. 각 현장에 승강기를 등록하세요'),
                   _helpRow(Icons.assignment, '4. 검사 관리에서 검사 이력을 기록하세요'),
@@ -156,8 +303,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          SizedBox(width: 100, child: Text(label, style: const TextStyle(fontSize: 12, color: AppTheme.gray400))),
-          Expanded(child: Text(value, style: const TextStyle(fontSize: 13, color: AppTheme.gray700))),
+          SizedBox(
+              width: 80,
+              child: Text(label,
+                  style: const TextStyle(fontSize: 12, color: AppTheme.gray400))),
+          Expanded(
+              child: Text(value,
+                  style: const TextStyle(fontSize: 13, color: AppTheme.gray700))),
         ],
       ),
     );
@@ -171,43 +323,123 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Icon(icon, size: 14, color: AppTheme.primary),
           const SizedBox(width: 8),
-          Expanded(child: Text(text, style: const TextStyle(fontSize: 12, color: AppTheme.gray600))),
+          Expanded(
+              child: Text(text,
+                  style: const TextStyle(fontSize: 12, color: AppTheme.gray600))),
         ],
       ),
     );
   }
+}
 
-  Future<void> _testConnection() async {
-    setState(() { _testing = true; _testResult = null; });
-    try {
-      await ApiService.setBaseUrl(_urlCtrl.text);
-      await ApiService.getDashboard();
-      if (mounted) setState(() => _testResult = '✅ 연결 성공! API 서버에 정상 접속되었습니다.');
-    } catch (e) {
-      if (mounted) setState(() => _testResult = '❌ 연결 실패: ${e.toString()}');
-    } finally {
-      if (mounted) setState(() => _testing = false);
-    }
+// ── 현재 연결 상태 카드 ─────────────────────────────────────────
+class _ConnectionStatusCard extends StatefulWidget {
+  @override
+  State<_ConnectionStatusCard> createState() => _ConnectionStatusCardState();
+}
+
+class _ConnectionStatusCardState extends State<_ConnectionStatusCard> {
+  bool _checking = false;
+  bool? _connected;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
   }
 
-  Future<void> _saveUrl() async {
-    setState(() => _saving = true);
+  Future<void> _check() async {
+    if (ApiService.needsSetup) {
+      setState(() => _connected = false);
+      return;
+    }
+    setState(() {
+      _checking = true;
+      _connected = null;
+    });
     try {
-      await ApiService.setBaseUrl(_urlCtrl.text);
-      if (mounted) {
-        showToast(context, 'API 서버 주소가 저장되었습니다.');
-        Navigator.pop(context);
-      }
-    } catch (e) {
-      if (mounted) showToast(context, e.toString(), isError: true);
-    } finally {
-      if (mounted) setState(() => _saving = false);
+      await ApiService.getDashboard();
+      if (mounted) setState(() { _connected = true; _checking = false; });
+    } catch (_) {
+      if (mounted) setState(() { _connected = false; _checking = false; });
     }
   }
 
   @override
-  void dispose() {
-    _urlCtrl.dispose();
-    super.dispose();
+  Widget build(BuildContext context) {
+    final url = ApiService.baseUrl;
+    Color bgColor;
+    Color fgColor;
+    IconData icon;
+    String statusText;
+
+    if (_checking) {
+      bgColor = const Color(0xFFFFF9C4);
+      fgColor = const Color(0xFFF57F17);
+      icon = Icons.wifi_find;
+      statusText = '연결 확인 중...';
+    } else if (_connected == true) {
+      bgColor = AppTheme.successLight;
+      fgColor = AppTheme.success;
+      icon = Icons.check_circle_outline;
+      statusText = '정상 연결됨';
+    } else {
+      bgColor = AppTheme.dangerLight;
+      fgColor = AppTheme.danger;
+      icon = Icons.error_outline;
+      statusText = url.isEmpty ? '서버 주소 미설정' : '연결 실패';
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: fgColor.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          _checking
+              ? SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: fgColor))
+              : Icon(icon, color: fgColor, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  statusText,
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: fgColor),
+                ),
+                if (url.isNotEmpty)
+                  Text(
+                    url,
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: fgColor.withValues(alpha: 0.7)),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          // 새로고침 버튼
+          IconButton(
+            icon: Icon(Icons.refresh, size: 18, color: fgColor),
+            onPressed: _checking ? null : _check,
+            tooltip: '연결 재확인',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+        ],
+      ),
+    );
   }
 }
