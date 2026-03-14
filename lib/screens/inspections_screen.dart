@@ -30,6 +30,11 @@ class _InspectionsScreenState extends State<InspectionsScreen>
   Map<DateTime, List<Inspection>> _eventMap = {};
   CalendarFormat _calendarFormat = CalendarFormat.month;
 
+  // 실시간 데이터 변경 구독
+  late final _dataChangeSub = ApiService.onDataChanged.listen((type) {
+    if (type == 'inspection' && mounted) _load();
+  });
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +46,7 @@ class _InspectionsScreenState extends State<InspectionsScreen>
   @override
   void dispose() {
     _tabCtrl.dispose();
+    _dataChangeSub.cancel();
     super.dispose();
   }
 

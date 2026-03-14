@@ -14,7 +14,8 @@ class SitesScreen extends StatefulWidget {
 }
 
 class _SitesScreenState extends State<SitesScreen> {
-  List<Site> _sites = [];
+  List<Site> _allSites = [];   // 전체 데이터 (서버에서 받은 원본)
+  List<Site> _sites = [];      // 화면에 표시되는 필터된 데이터
   bool _loading = true;
   String? _error;
   String _selectedRegion = '전체';
@@ -28,6 +29,13 @@ class _SitesScreenState extends State<SitesScreen> {
   final Set<int> _selectedIds = {};
   List<String> _teamOptions = ['파주1팀', '파주2팀'];
 
+  // ── 실시간 데이터 변경 구독 ──
+  late final _dataChangeSub = ApiService.onDataChanged.listen((type) {
+    if ((type == 'site' || type == 'elevator') && mounted) {
+      _load(silent: true);
+    }
+  });
+
   @override
   void initState() {
     super.initState();
@@ -38,22 +46,35 @@ class _SitesScreenState extends State<SitesScreen> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _dataChangeSub.cancel();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) setState(() { _loading = true; _error = null; });
     try {
+      // 서버에서 팀 필터만 적용 (region은 클라이언트에서 필터링)
       final sites = await ApiService.getSites(
         search: _searchText.isNotEmpty ? _searchText : null,
         status: _statusFilter.isNotEmpty ? _statusFilter : null,
-        region: _selectedRegion != '전체' ? _selectedRegion : null,
         team: _selectedTeam != '전체' ? _selectedTeam : null,
       );
-      if (mounted) setState(() { _sites = sites; _loading = false; });
+      if (mounted) {
+        _allSites = sites;
+        setState(() {
+          _sites = _applyLocalFilters(sites);
+          _loading = false;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
+  }
+
+  // 클라이언트 사이드 region 필터 적용
+  List<Site> _applyLocalFilters(List<Site> sites) {
+    if (_selectedRegion == '전체') return sites;
+    return sites.where((s) => s.address.contains(_selectedRegion)).toList();
   }
 
   Future<void> _loadTeams() async {
@@ -433,8 +454,11 @@ class _SitesScreenState extends State<SitesScreen> {
           final isSelected = region == _selectedRegion;
           return GestureDetector(
             onTap: () {
-              setState(() => _selectedRegion = region);
-              _load();
+              // 클라이언트 사이드 필터링 (즉시 반영)
+              setState(() {
+                _selectedRegion = region;
+                _sites = _applyLocalFilters(_allSites);
+              });
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -723,39 +747,56 @@ class _SitesScreenState extends State<SitesScreen> {
     );
   }
 
-  void _openSiteDetail(Site site) {
-    Navigator.push(context, MaterialPageRoute(
+  void _openSiteDetail(Site site) async {
+    final result = await Navigator.push<bool>(context, MaterialPageRoute(
       builder: (_) => SiteDetailScreen(site: site),
     ));
+    // 상세에서 수정/삭제 됐으면 즉시 목록 갱신
+    if (result == true && mounted) await _load(silent: true);
   }
 
   void _openSiteForm(Site? site) async {
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => SiteFormSheet(site: site),
     );
-    if (result == true) _load();
+    if (result == true && mounted) {
+      // 즉시 서버에서 목록 재로드 + 토스트
+      await _load(silent: false);
+      if (mounted) {
+        showToast(context, site == null ? '✓ 현장이 등록되었습니다!' : '✓ 현장 정보가 수정되었습니다!');
+      }
+    }
   }
 
   Future<void> _deleteSite(Site site) async {
     final ok = await ConfirmDialog.show(
       context,
       title: '현장 삭제',
-      content: '${site.siteName} 현장을 삭제하시겠습니까?\n관련된 승강기, 검사 기록이 모두 삭제됩니다.',
+      content: '"${site.siteName}" 현장을 삭제하시겠습니까?\n\n관련된 승강기, 검사 기록이 모두 함께 삭제됩니다.',
     );
     if (ok != true) return;
+    // 즉시 UI에서 제거 (낙관적 업데이트)
+    final removedSite = site;
+    setState(() {
+      _sites.removeWhere((s) => s.id == site.id);
+      _allSites.removeWhere((s) => s.id == site.id);
+    });
     try {
       await ApiService.deleteSite(site.id!);
-      if (mounted) {
-        showToast(context, '현장이 삭제되었습니다.');
-        _load();
-      }
+      if (mounted) showToast(context, '"${removedSite.siteName}" 현장이 삭제되었습니다.');
     } catch (e) {
-      if (mounted) showToast(context, e.toString(), isError: true);
+      // 실패 시 원상복구 후 서버에서 재로드
+      if (mounted) {
+        showToast(context, '삭제 실패: ${e.toString()}', isError: true);
+        await _load(silent: true);
+      }
     }
   }
 }
@@ -772,42 +813,83 @@ class SiteDetailScreen extends StatefulWidget {
 class _SiteDetailScreenState extends State<SiteDetailScreen> {
   List<Elevator> _elevators = [];
   bool _loading = true;
+  late Site _site; // 수정 후 업데이트 지원
 
   @override
   void initState() {
     super.initState();
+    _site = widget.site;
     _loadElevators();
   }
 
   Future<void> _loadElevators() async {
     try {
-      final elevs = await ApiService.getSiteElevators(widget.site.id!);
+      final elevs = await ApiService.getSiteElevators(_site.id!);
       if (mounted) setState(() { _elevators = elevs; _loading = false; });
     } catch (e) {
       if (mounted) setState(() => _loading = false);
     }
   }
 
+  Future<void> _editSite() async {
+    final result = await showModalBottomSheet<dynamic>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SiteFormSheet(site: _site),
+    );
+    if (result == true && mounted) {
+      // 수정된 현장정보 다시 로드
+      try {
+        final updated = await ApiService.getSite(_site.id!);
+        if (mounted) setState(() => _site = updated);
+      } catch (_) {}
+      if (mounted) {
+        showToast(context, '현장 정보가 수정되었습니다. ✓');
+        Navigator.pop(context, true); // 목록도 갱신
+      }
+    }
+  }
+
+  Future<void> _deleteSite() async {
+    final ok = await ConfirmDialog.show(
+      context,
+      title: '현장 삭제',
+      content: '"${_site.siteName}" 현장을 삭제하시겠습니까?\n\n승강기, 검사 기록이 모두 삭제됩니다.',
+    );
+    if (ok != true) return;
+    try {
+      await ApiService.deleteSite(_site.id!);
+      if (mounted) {
+        showToast(context, '"${_site.siteName}" 현장이 삭제되었습니다.');
+        Navigator.pop(context, true); // 목록에서도 삭제된 현장 제거
+      }
+    } catch (e) {
+      if (mounted) showToast(context, '삭제 실패: $e', isError: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final site = widget.site;
+    final site = _site;
     return Scaffold(
       appBar: AppBar(
         title: Text(site.siteName),
         actions: [
           IconButton(
             icon: const Icon(Icons.edit_outlined),
-            onPressed: () async {
-              final result = await showModalBottomSheet<bool>(
-                context: context,
-                isScrollControlled: true,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                ),
-                builder: (_) => SiteFormSheet(site: site),
-              );
-              if (result == true && mounted) Navigator.pop(context, true);
-            },
+            tooltip: '현장 수정',
+            onPressed: _editSite,
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: '현장 삭제',
+            color: AppTheme.danger,
+            onPressed: _deleteSite,
           ),
         ],
       ),
@@ -961,7 +1043,7 @@ class _SiteDetailScreenState extends State<SiteDetailScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => ElevatorFormSheet(siteId: widget.site.id!),
+      builder: (_) => ElevatorFormSheet(siteId: _site.id!),
     );
     if (result == true) _loadElevators();
   }
@@ -973,7 +1055,7 @@ class _SiteDetailScreenState extends State<SiteDetailScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => ElevatorFormSheet(siteId: widget.site.id!, elevator: elevator),
+      builder: (_) => ElevatorFormSheet(siteId: _site.id!, elevator: elevator),
     );
     if (result == true) _loadElevators();
   }
@@ -1590,17 +1672,11 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
           }
         }
         if (mounted) {
-          if (successCount > 0) {
-            showToast(context,
-                '현장 등록 완료! 호기 ${successCount}대가 함께 등록되었습니다.');
-          } else if (_elevators.isNotEmpty) {
-            showToast(context, '현장은 등록되었으나 호기 등록에 실패했습니다.',
-                isError: true);
-          }
+          // 타이틀막 대신 pop(true)만 전달 → 현장목록에서 토스트 처리
           Navigator.pop(context, true);
         }
       } else {
-        // 현장 수정만
+        // 현장 수정
         await ApiService.updateSite(widget.site!.id!, site);
         if (mounted) Navigator.pop(context, true);
       }

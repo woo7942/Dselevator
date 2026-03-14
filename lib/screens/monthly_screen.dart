@@ -30,6 +30,11 @@ class _MonthlyScreenState extends State<MonthlyScreen>
   Site? _filterSite;
   bool _sitesLoaded = false;
 
+  // 실시간 데이터 변경 구독
+  late final _dataChangeSub = ApiService.onDataChanged.listen((type) {
+    if (type == 'monthly' && mounted) _load();
+  });
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +46,7 @@ class _MonthlyScreenState extends State<MonthlyScreen>
   @override
   void dispose() {
     _tab.dispose();
+    _dataChangeSub.cancel();
     super.dispose();
   }
 

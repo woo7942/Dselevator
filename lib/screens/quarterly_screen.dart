@@ -29,6 +29,11 @@ class _QuarterlyScreenState extends State<QuarterlyScreen>
   Site? _filterSite;
   bool _sitesLoaded = false;
 
+  // 실시간 데이터 변경 구독
+  late final _dataChangeSub = ApiService.onDataChanged.listen((type) {
+    if (type == 'quarterly' && mounted) _load();
+  });
+
   @override
   void initState() {
     super.initState();
@@ -40,6 +45,7 @@ class _QuarterlyScreenState extends State<QuarterlyScreen>
   @override
   void dispose() {
     _tab.dispose();
+    _dataChangeSub.cancel();
     super.dispose();
   }
 

@@ -33,6 +33,11 @@ class _IssuesScreenState extends State<IssuesScreen>
   // 그룹 보기 모드: 'elevator' | 'site' | 'list'
   String _groupMode = 'elevator';
 
+  // 실시간 데이터 변경 구독
+  late final _dataChangeSub = ApiService.onDataChanged.listen((type) {
+    if (type == 'issue' && mounted) _load();
+  });
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +48,7 @@ class _IssuesScreenState extends State<IssuesScreen>
   @override
   void dispose() {
     _tabCtrl.dispose();
+    _dataChangeSub.cancel();
     super.dispose();
   }
 
