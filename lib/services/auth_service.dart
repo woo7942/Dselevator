@@ -8,12 +8,14 @@ class UserInfo {
   final String name;
   final String role; // 'admin' | 'user'
   final String? lastLogin;
+  final String tabPermissions; // 탭 접근 권한 (콤마 구분, 빈 문자열=전체허용)
 
   const UserInfo({
     required this.id,
     required this.name,
     required this.role,
     this.lastLogin,
+    this.tabPermissions = '',
   });
 
   bool get isAdmin => role == 'admin';
@@ -23,10 +25,12 @@ class UserInfo {
     name: j['name'] as String,
     role: j['role'] as String? ?? 'user',
     lastLogin: j['last_login'] as String?,
+    tabPermissions: j['tab_permissions'] as String? ?? '',
   );
 
   Map<String, dynamic> toJson() => {
-    'id': id, 'name': name, 'role': role, 'last_login': lastLogin,
+    'id': id, 'name': name, 'role': role,
+    'last_login': lastLogin, 'tab_permissions': tabPermissions,
   };
 }
 

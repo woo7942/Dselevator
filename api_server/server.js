@@ -234,12 +234,18 @@ function hashPin(pin) {
   return crypto.createHash('sha256').update(pin).digest('hex');
 }
 
-const adminCount = db.prepare("SELECT COUNT(*) as cnt FROM app_users WHERE role='admin'").get();
-if (adminCount.cnt === 0) {
-  db.prepare(`INSERT INTO app_users (name, pin_hash, role, is_active, tab_permissions)
-    VALUES (?, ?, 'admin', 1, '')`)
-    .run('우경주', hashPin('1234'));
-  console.log('✅ 기본 관리자 계정 생성: 우경주 / PIN: 1234');
+// 기본 사용자 목록 (서버 재시작 시 없으면 자동 생성)
+const defaultUsers = [
+  { name: '우경주', pin: '1234', role: 'admin' },
+  { name: '강주은', pin: '1234', role: 'user' },
+  { name: '권순흠', pin: '1234', role: 'user' },
+  { name: '문활영', pin: '1234', role: 'user' },
+];
+
+const insertUser = db.prepare(`INSERT OR IGNORE INTO app_users (name, pin_hash, role, is_active, tab_permissions) VALUES (?, ?, ?, 1, '')`);
+for (const u of defaultUsers) {
+  const r = insertUser.run(u.name, hashPin(u.pin), u.role);
+  if (r.changes > 0) console.log(`✅ 기본 계정 생성: ${u.name} (${u.role}) / PIN: ${u.pin}`);
 }
 
 // ── 헬퍼 함수 ─────────────────────────────────────────────────
@@ -257,7 +263,7 @@ app.post('/api/auth/login', wrap((req, res) => {
   if (!user) return res.status(401).json({ success: false, error: '등록되지 않은 사용자이거나 비활성 계정입니다' });
   if (user.pin_hash !== hashPin(pin.trim())) return res.status(401).json({ success: false, error: 'PIN이 올바르지 않습니다' });
   db.prepare('UPDATE app_users SET last_login=CURRENT_TIMESTAMP WHERE id=?').run(user.id);
-  res.json({ success: true, user: { id: user.id, name: user.name, role: user.role, tab_permissions: user.tab_permissions, last_login: user.last_login } });
+  res.json({ success: true, user: { id: user.id, name: user.name, role: user.role, tab_permissions: user.tab_permissions || '', last_login: user.last_login } });
 }));
 
 // POST /api/auth/change-pin
@@ -275,8 +281,8 @@ app.post('/api/auth/change-pin', wrap((req, res) => {
 // ── 사용자 관리 API ───────────────────────────────────────────
 // GET /api/users
 app.get('/api/users', wrap((req, res) => {
-  const users = db.prepare('SELECT id, name, role, is_active, tab_permissions, last_login, created_at FROM app_users ORDER BY created_at ASC').all();
-  res.json({ success: true, results: users });
+  const rows = db.prepare('SELECT id, name, role, is_active, COALESCE(tab_permissions,\'\') as tab_permissions, last_login, created_at FROM app_users ORDER BY created_at ASC').all();
+  res.json({ success: true, results: rows });
 }));
 
 // POST /api/users
