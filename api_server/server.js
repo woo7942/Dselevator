@@ -145,6 +145,18 @@ CREATE TABLE IF NOT EXISTS monthly_checks (
   FOREIGN KEY (site_id) REFERENCES sites(id)
 );
 
+CREATE TABLE IF NOT EXISTS app_users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE NOT NULL,
+  pin_hash TEXT NOT NULL,
+  role TEXT DEFAULT 'user' CHECK(role IN ('admin','user')),
+  is_active INTEGER DEFAULT 1,
+  tab_permissions TEXT DEFAULT '',
+  last_login DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS quarterly_checks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   elevator_id INTEGER NOT NULL,
@@ -216,11 +228,94 @@ if (siteCount.cnt === 0) {
   console.log('✅ 샘플 데이터 삽입 완료');
 }
 
+// ── 기본 관리자 계정 초기화 ──────────────────────────────────
+const crypto = require('crypto');
+function hashPin(pin) {
+  return crypto.createHash('sha256').update(pin).digest('hex');
+}
+
+const adminCount = db.prepare("SELECT COUNT(*) as cnt FROM app_users WHERE role='admin'").get();
+if (adminCount.cnt === 0) {
+  db.prepare(`INSERT INTO app_users (name, pin_hash, role, is_active, tab_permissions)
+    VALUES (?, ?, 'admin', 1, '')`)
+    .run('우경주', hashPin('1234'));
+  console.log('✅ 기본 관리자 계정 생성: 우경주 / PIN: 1234');
+}
+
 // ── 헬퍼 함수 ─────────────────────────────────────────────────
 const wrap = (fn) => async (req, res, next) => {
   try { await fn(req, res, next); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 };
+
+// ── 인증(Auth) ────────────────────────────────────────────────
+// POST /api/auth/login
+app.post('/api/auth/login', wrap((req, res) => {
+  const { name, pin } = req.body;
+  if (!name || !pin) return res.status(400).json({ success: false, error: '이름과 PIN이 필요합니다' });
+  const user = db.prepare('SELECT * FROM app_users WHERE name=? AND is_active=1').get(name.trim());
+  if (!user) return res.status(401).json({ success: false, error: '등록되지 않은 사용자이거나 비활성 계정입니다' });
+  if (user.pin_hash !== hashPin(pin.trim())) return res.status(401).json({ success: false, error: 'PIN이 올바르지 않습니다' });
+  db.prepare('UPDATE app_users SET last_login=CURRENT_TIMESTAMP WHERE id=?').run(user.id);
+  res.json({ success: true, user: { id: user.id, name: user.name, role: user.role, tab_permissions: user.tab_permissions, last_login: user.last_login } });
+}));
+
+// POST /api/auth/change-pin
+app.post('/api/auth/change-pin', wrap((req, res) => {
+  const { name, current_pin, new_pin } = req.body;
+  if (!name || !current_pin || !new_pin) return res.status(400).json({ success: false, error: '필수값 누락' });
+  const user = db.prepare('SELECT * FROM app_users WHERE name=?').get(name.trim());
+  if (!user) return res.status(404).json({ success: false, error: '사용자를 찾을 수 없습니다' });
+  if (user.pin_hash !== hashPin(current_pin.trim())) return res.status(401).json({ success: false, error: '현재 PIN이 올바르지 않습니다' });
+  if (new_pin.trim().length < 4) return res.status(400).json({ success: false, error: 'PIN은 4자리 이상이어야 합니다' });
+  db.prepare('UPDATE app_users SET pin_hash=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(hashPin(new_pin.trim()), user.id);
+  res.json({ success: true });
+}));
+
+// ── 사용자 관리 API ───────────────────────────────────────────
+// GET /api/users
+app.get('/api/users', wrap((req, res) => {
+  const users = db.prepare('SELECT id, name, role, is_active, tab_permissions, last_login, created_at FROM app_users ORDER BY created_at ASC').all();
+  res.json({ success: true, results: users });
+}));
+
+// POST /api/users
+app.post('/api/users', wrap((req, res) => {
+  const { name, pin, role } = req.body;
+  if (!name || !pin) return res.status(400).json({ success: false, error: '이름과 PIN이 필요합니다' });
+  if (pin.trim().length < 4) return res.status(400).json({ success: false, error: 'PIN은 4자리 이상이어야 합니다' });
+  const exists = db.prepare('SELECT id FROM app_users WHERE name=?').get(name.trim());
+  if (exists) return res.status(409).json({ success: false, error: '이미 존재하는 이름입니다' });
+  const r = db.prepare(`INSERT INTO app_users (name, pin_hash, role, is_active, tab_permissions) VALUES (?,?,?,1,'')`)
+    .run(name.trim(), hashPin(pin.trim()), role === 'admin' ? 'admin' : 'user');
+  res.json({ success: true, id: r.lastInsertRowid });
+}));
+
+// PUT /api/users/:id
+app.put('/api/users/:id', wrap((req, res) => {
+  const { pin, role, is_active, tab_permissions } = req.body;
+  const user = db.prepare('SELECT * FROM app_users WHERE id=?').get(req.params.id);
+  if (!user) return res.status(404).json({ success: false, error: '사용자를 찾을 수 없습니다' });
+  const newPinHash = (pin && pin.trim().length >= 4) ? hashPin(pin.trim()) : user.pin_hash;
+  const newRole = role !== undefined ? (role === 'admin' ? 'admin' : 'user') : user.role;
+  const newActive = is_active !== undefined ? (is_active ? 1 : 0) : user.is_active;
+  const newPerms = tab_permissions !== undefined ? tab_permissions : user.tab_permissions;
+  db.prepare(`UPDATE app_users SET pin_hash=?, role=?, is_active=?, tab_permissions=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+    .run(newPinHash, newRole, newActive, newPerms, req.params.id);
+  res.json({ success: true });
+}));
+
+// DELETE /api/users/:id
+app.delete('/api/users/:id', wrap((req, res) => {
+  const user = db.prepare('SELECT * FROM app_users WHERE id=?').get(req.params.id);
+  if (!user) return res.status(404).json({ success: false, error: '사용자를 찾을 수 없습니다' });
+  if (user.role === 'admin') {
+    const adminCount = db.prepare("SELECT COUNT(*) as cnt FROM app_users WHERE role='admin'").get();
+    if (adminCount.cnt <= 1) return res.status(400).json({ success: false, error: '마지막 관리자 계정은 삭제할 수 없습니다' });
+  }
+  db.prepare('DELETE FROM app_users WHERE id=?').run(req.params.id);
+  res.json({ success: true });
+}));
 
 // ── 대시보드 ──────────────────────────────────────────────────
 app.get('/api/dashboard', wrap((req, res) => {
