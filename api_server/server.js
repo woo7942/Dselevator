@@ -777,7 +777,16 @@ app.post('/api/image/parse', upload.array('images', 10), async (req, res) => {
   });
 });
 
+// ── 서버 버전 확인 ─────────────────────────────────────────────
+app.get('/api/version', (req, res) => {
+  const users = db.prepare('SELECT COUNT(*) as cnt FROM app_users').get();
+  res.json({ version: '2.1.0', users: users.cnt, status: 'ok' });
+});
+
 // ── 서버 시작 ──────────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ API 서버 시작: http://0.0.0.0:${PORT}`);
+  // 시작 시 사용자 수 로그
+  const cnt = db.prepare('SELECT COUNT(*) as cnt FROM app_users').get();
+  console.log(`👥 등록된 사용자: ${cnt.cnt}명`);
 });
