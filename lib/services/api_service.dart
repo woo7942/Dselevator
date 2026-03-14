@@ -527,14 +527,76 @@ class ApiService {
     await _post('/api/teams', {'name': name});
   }
 
-  // ── 사용자 관리 ─────────────────────────────────────────────
+  // ── 사용자 관리 (로컬 캐시 + 서버 동기화) ──────────────────
+  static const String _userCacheKey = 'cached_users_v2';
+
+  /// 로컬에 사용자 목록 저장
+  static Future<void> _saveUsersToCache(List<dynamic> users) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_userCacheKey, jsonEncode(users));
+    } catch (_) {}
+  }
+
+  /// 로컬 캐시에서 사용자 목록 불러오기
+  static Future<List<dynamic>> _loadUsersFromCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_userCacheKey);
+      if (raw != null && raw.isNotEmpty) {
+        return jsonDecode(raw) as List<dynamic>;
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  /// 캐시에 있는 사용자를 서버에 복원 (서버 재시작 후 동기화)
+  static Future<void> _syncCacheToServer(List<dynamic> cached) async {
+    for (final u in cached) {
+      final m = u as Map<String, dynamic>;
+      final name = m['name'] as String? ?? '';
+      if (name.isEmpty) continue;
+      try {
+        // 서버에 없으면 추가 (있으면 409 conflict → 무시)
+        await _post('/api/users/restore', {
+          'name': name,
+          'role': m['role'] ?? 'user',
+          'tab_permissions': m['tab_permissions'] ?? '',
+          'is_active': m['is_active'] ?? 1,
+        });
+      } catch (_) {}
+    }
+  }
+
   static Future<List<dynamic>> getUsers() async {
-    final res = await _get('/api/users');
-    return _extractList(res);
+    try {
+      final res = await _get('/api/users');
+      final list = _extractList(res);
+      // 서버 데이터가 1명(기본관리자만)이고 캐시에 더 많으면 → 서버 재시작된 것
+      final cached = await _loadUsersFromCache();
+      if (list.length <= 1 && cached.length > 1) {
+        // 캐시를 서버에 복원
+        await _syncCacheToServer(cached);
+        // 복원 후 다시 조회
+        final res2 = await _get('/api/users');
+        final list2 = _extractList(res2);
+        await _saveUsersToCache(list2);
+        return list2;
+      }
+      await _saveUsersToCache(list);
+      return list;
+    } catch (e) {
+      // 서버 오류 시 캐시 반환
+      return await _loadUsersFromCache();
+    }
   }
 
   static Future<void> createUser(String name, String pin, String role) async {
     await _post('/api/users', {'name': name, 'pin': pin, 'role': role});
+    // 캐시 업데이트
+    final list = await _loadUsersFromCache();
+    list.add({'name': name, 'role': role, 'is_active': 1, 'tab_permissions': ''});
+    await _saveUsersToCache(list);
   }
 
   static Future<void> updateUser(int id, {String? name, String? pin, String? role, int? isActive, String? tabPermissions}) async {
@@ -545,10 +607,20 @@ class ApiService {
     if (isActive != null) body['is_active'] = isActive;
     if (tabPermissions != null) body['tab_permissions'] = tabPermissions;
     await _put('/api/users/$id', body);
+    // 캐시 새로고침
+    try {
+      final res = await _get('/api/users');
+      await _saveUsersToCache(_extractList(res));
+    } catch (_) {}
   }
 
   static Future<void> deleteUser(int id) async {
     await _delete('/api/users/$id');
+    // 캐시 새로고침
+    try {
+      final res = await _get('/api/users');
+      await _saveUsersToCache(_extractList(res));
+    } catch (_) {}
   }
 
   // ── 외부 URI 헬퍼 ───────────────────────────────────────────

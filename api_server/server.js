@@ -323,6 +323,24 @@ app.delete('/api/users/:id', wrap((req, res) => {
   res.json({ success: true });
 }));
 
+// POST /api/users/restore  ← 앱 캐시 → 서버 복원용 (PIN 없이 계정만 복원)
+app.post('/api/users/restore', wrap((req, res) => {
+  const { name, role, tab_permissions, is_active } = req.body;
+  if (!name) return res.status(400).json({ success: false, error: 'name 필요' });
+  const exists = db.prepare('SELECT id FROM app_users WHERE name=?').get(name.trim());
+  if (exists) {
+    // 이미 있으면 tab_permissions, is_active만 업데이트
+    db.prepare(`UPDATE app_users SET role=?, tab_permissions=?, is_active=?, updated_at=CURRENT_TIMESTAMP WHERE name=?`)
+      .run(role || 'user', tab_permissions || '', is_active ?? 1, name.trim());
+    return res.json({ success: true, restored: false, id: exists.id });
+  }
+  // 없으면 PIN 없이 추가 (PIN은 '0000' 임시값 - 나중에 관리자가 재설정)
+  const r = db.prepare(`INSERT INTO app_users (name, pin_hash, role, is_active, tab_permissions) VALUES (?,?,?,?,?)`)
+    .run(name.trim(), require('crypto').createHash('sha256').update('0000').digest('hex'),
+         role || 'user', is_active ?? 1, tab_permissions || '');
+  res.json({ success: true, restored: true, id: r.lastInsertRowid });
+}));
+
 // ── 대시보드 ──────────────────────────────────────────────────
 app.get('/api/dashboard', wrap((req, res) => {
   const sitesCount = db.prepare("SELECT COUNT(*) as count FROM sites WHERE status='active'").get();
