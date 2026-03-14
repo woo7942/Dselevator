@@ -1287,21 +1287,47 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
                         ],
                       ),
                       _field(_mgCtrl, '담당자'),
-                      // ── 팀 선택 + 팀 추가 버튼 ──
+                      // ── 팀 선택 ──
+                      const SizedBox(height: 4),
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Expanded(
                             child: DropdownButtonFormField<String>(
-                              value: _teamOptions.contains(_team) ? _team : null,
-                              decoration: const InputDecoration(
+                              value: (_team != null && _teamOptions.contains(_team)) ? _team : null,
+                              decoration: InputDecoration(
                                 labelText: '팀',
-                                prefixIcon: Icon(Icons.group_outlined, size: 18),
+                                prefixIcon: const Icon(Icons.group_outlined, size: 18),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                               ),
-                              hint: const Text('팀 선택'),
+                              hint: const Text('팀 선택', style: TextStyle(color: Colors.grey)),
+                              isExpanded: true,
                               items: [
-                                const DropdownMenuItem(value: null, child: Text('팀 없음')),
-                                ..._teamOptions.map((t) => DropdownMenuItem(value: t, child: Text(t))),
+                                const DropdownMenuItem<String>(
+                                  value: null,
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.block_outlined, size: 16, color: Colors.grey),
+                                      SizedBox(width: 8),
+                                      Text('팀 없음'),
+                                    ],
+                                  ),
+                                ),
+                                ..._teamOptions.map((t) => DropdownMenuItem<String>(
+                                  value: t,
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.group, size: 16,
+                                        color: t == '파주1팀'
+                                          ? const Color(0xFF1565C0)
+                                          : t == '파주2팀'
+                                            ? const Color(0xFF6A1B9A)
+                                            : AppTheme.primary),
+                                      const SizedBox(width: 8),
+                                      Text(t, style: const TextStyle(fontWeight: FontWeight.w500)),
+                                    ],
+                                  ),
+                                )),
                               ],
                               onChanged: (v) => setState(() => _team = v),
                             ),
@@ -1309,7 +1335,7 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
                           const SizedBox(width: 8),
                           // 팀 추가 버튼
                           SizedBox(
-                            height: 48,
+                            height: 52,
                             child: OutlinedButton.icon(
                               onPressed: _addTeam,
                               icon: const Icon(Icons.add, size: 16),
@@ -1318,19 +1344,32 @@ class _SiteFormSheetState extends State<SiteFormSheet> {
                                 foregroundColor: AppTheme.primary,
                                 side: const BorderSide(color: AppTheme.primary),
                                 padding: const EdgeInsets.symmetric(horizontal: 10),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                               ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 8),
+                      // ── 상태 선택 ──
                       DropdownButtonFormField<String>(
-                        initialValue: _status,
-                        decoration: const InputDecoration(labelText: '상태'),
+                        value: _status,
+                        decoration: InputDecoration(
+                          labelText: '상태',
+                          prefixIcon: const Icon(Icons.toggle_on_outlined, size: 18),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        ),
+                        isExpanded: true,
                         items: const [
-                          DropdownMenuItem(value: 'active', child: Text('운영중')),
-                          DropdownMenuItem(value: 'inactive', child: Text('비운영')),
-                          DropdownMenuItem(value: 'suspended', child: Text('중지')),
+                          DropdownMenuItem(value: 'active',
+                            child: Row(children: [Icon(Icons.check_circle_outline, size: 16, color: Colors.green), SizedBox(width: 8), Text('운영중')])),
+                          DropdownMenuItem(value: 'inactive',
+                            child: Row(children: [Icon(Icons.pause_circle_outline, size: 16, color: Colors.orange), SizedBox(width: 8), Text('비운영')])),
+                          DropdownMenuItem(value: 'suspended',
+                            child: Row(children: [Icon(Icons.cancel_outlined, size: 16, color: Colors.red), SizedBox(width: 8), Text('중지')])),
                         ],
                         onChanged: (v) => setState(() => _status = v ?? 'active'),
                       ),

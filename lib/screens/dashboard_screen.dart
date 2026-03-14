@@ -322,10 +322,10 @@ class DashboardScreenState extends State<DashboardScreen> {
           children: d.teamStats.map((t) {
             final m = t as Map<String, dynamic>;
             final team = m['team']?.toString() ?? '';
-            final siteCount = (m['site_count'] as num?)?.toInt() ?? 0;
-            final elevCount = (m['elevator_count'] as num?)?.toInt() ?? 0;
-            final faultCount = (m['fault_count'] as num?)?.toInt() ?? 0;
-            final warnCount = (m['warning_count'] as num?)?.toInt() ?? 0;
+            final siteCount = (m['sites'] as num?)?.toInt() ?? 0;
+            final elevCount = (m['elevators'] as num?)?.toInt() ?? 0;
+            final faultCount = (m['fault'] as num?)?.toInt() ?? 0;
+            final warnCount = (m['warning'] as num?)?.toInt() ?? 0;
             final pendIssues = (m['pending_issues'] as num?)?.toInt() ?? 0;
             final critIssues = (m['critical_issues'] as num?)?.toInt() ?? 0;
             final fg = _teamFgColor(team);
@@ -483,8 +483,8 @@ class DashboardScreenState extends State<DashboardScreen> {
     );
     if (teamData == null) return const SizedBox.shrink();
     final m = teamData as Map<String, dynamic>;
-    final siteCount = (m['site_count'] as num?)?.toInt() ?? 0;
-    final elevCount = (m['elevator_count'] as num?)?.toInt() ?? 0;
+    final siteCount = (m['sites'] as num?)?.toInt() ?? 0;
+    final elevCount = (m['elevators'] as num?)?.toInt() ?? 0;
     final fg = _teamFgColor(_selectedTeam);
     final bg = _teamBgColor(_selectedTeam);
     return Container(
