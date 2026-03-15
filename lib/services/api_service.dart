@@ -198,36 +198,42 @@ class ApiService {
 
   static Future<int> createSite(Site site) async {
     final res = await _post('/api/sites', site.toJson());
-    notifyDataChanged('site'); // 데이터 변경 알림
+    notifyDataChanged('site');
+    _autoBackup(); // 로컬 백업
     return (res['id'] as num?)?.toInt() ?? (res['data']?['id'] as num?)?.toInt() ?? 0;
   }
 
   static Future<void> updateSite(int id, Site site) async {
     await _put('/api/sites/$id', site.toJson());
-    notifyDataChanged('site'); // 데이터 변경 알림
+    notifyDataChanged('site');
+    _autoBackup();
   }
 
   static Future<void> deleteSite(int id) async {
     await _delete('/api/sites/$id');
-    notifyDataChanged('site'); // 데이터 변경 알림
+    notifyDataChanged('site');
+    _autoBackup();
   }
 
   static Future<int> createElevator(int siteId, Elevator elevator) async {
     final body = elevator.toJson();
     body['site_id'] = siteId;
     final res = await _post('/api/elevators', body);
-    notifyDataChanged('elevator'); // 데이터 변경 알림
+    notifyDataChanged('elevator');
+    _autoBackup();
     return (res['id'] as num?)?.toInt() ?? (res['data']?['id'] as num?)?.toInt() ?? 0;
   }
 
   static Future<void> updateElevator(int id, Elevator elevator) async {
     await _put('/api/elevators/$id', elevator.toJson());
-    notifyDataChanged('elevator'); // 데이터 변경 알림
+    notifyDataChanged('elevator');
+    _autoBackup();
   }
 
   static Future<void> deleteElevator(int id) async {
     await _delete('/api/elevators/$id');
-    notifyDataChanged('elevator'); // 데이터 변경 알림
+    notifyDataChanged('elevator');
+    _autoBackup();
   }
 
   // ── 검사 ──────────────────────────────────────────────────
@@ -265,12 +271,14 @@ class ApiService {
   static Future<int> createInspection(Inspection inspection) async {
     final res = await _post('/api/inspections', inspection.toJson());
     notifyDataChanged('inspection');
+    _autoBackup();
     return (res['id'] as num?)?.toInt() ?? (res['data']?['id'] as num?)?.toInt() ?? 0;
   }
 
   static Future<void> updateInspection(int id, Inspection inspection) async {
     await _put('/api/inspections/$id', inspection.toJson());
     notifyDataChanged('inspection');
+    _autoBackup();
   }
 
   static Future<void> deleteInspection(int id) async {
@@ -296,12 +304,14 @@ class ApiService {
   static Future<int> createIssue(InspectionIssue issue) async {
     final res = await _post('/api/issues', issue.toJson());
     notifyDataChanged('issue');
+    _autoBackup();
     return (res['id'] as num?)?.toInt() ?? (res['data']?['id'] as num?)?.toInt() ?? 0;
   }
 
   static Future<void> updateIssue(int id, InspectionIssue issue) async {
     await _put('/api/issues/$id', issue.toJson());
     notifyDataChanged('issue');
+    _autoBackup();
   }
 
   static Future<void> updateIssueAction(int id, {
@@ -326,12 +336,14 @@ class ApiService {
   static Future<void> deleteIssue(int id) async {
     await _delete('/api/issues/$id');
     notifyDataChanged('issue');
+    _autoBackup();
   }
 
   static Future<Map<String, dynamic>> createIssuesBulk(
       List<Map<String, dynamic>> issues) async {
     final result = await _post('/api/issues/bulk', {'issues': issues});
     notifyDataChanged('issue');
+    _autoBackup();
     return result;
   }
 
@@ -517,6 +529,10 @@ class ApiService {
   }
 
   // ── 팀 관련 ────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> getVersion() async {
+    return await _get('/api/version');
+  }
+
   static Future<List<String>> getTeams() async {
     final res = await _get('/api/teams');
     final list = _extractList(res);
@@ -525,6 +541,50 @@ class ApiService {
 
   static Future<void> addTeam(String name) async {
     await _post('/api/teams', {'name': name});
+  }
+
+  // ── 로컬 DB 백업/복원 (영구 데이터 보호) ──────────────────────
+  static const String _backupCacheKey = 'db_backup_v1';
+  static const String _backupTimestampKey = 'db_backup_timestamp';
+
+  /// 서버 전체 데이터를 로컬에 백업
+  static Future<void> backupToLocal() async {
+    try {
+      final res = await _get('/api/backup');
+      if (res['success'] == true && res['data'] != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_backupCacheKey, jsonEncode(res['data']));
+        await prefs.setString(_backupTimestampKey, DateTime.now().toIso8601String());
+      }
+    } catch (_) {}
+  }
+
+  /// 로컬 백업에서 서버로 복원 (서버 재시작 후 데이터 손실 시)
+  static Future<Map<String, dynamic>?> restoreFromLocal() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_backupCacheKey);
+      if (raw == null || raw.isEmpty) return null;
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      final res = await _post('/api/restore', {'data': data});
+      return res;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 마지막 백업 시각 반환
+  static Future<String?> getLastBackupTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_backupTimestampKey);
+  }
+
+  /// 데이터 추가/수정/삭제 후 자동 백업 트리거
+  static Future<void> _autoBackup() async {
+    // 비동기로 실행 - 백업 실패해도 메인 동작에 영향 없음
+    Future.delayed(const Duration(milliseconds: 500), () async {
+      await backupToLocal();
+    });
   }
 
   // ── 사용자 관리 (로컬 캐시 + 서버 동기화) ──────────────────

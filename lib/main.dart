@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'utils/theme.dart';
 import 'services/api_service.dart';
 import 'screens/main_screen.dart';
@@ -14,6 +16,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ko_KR', null);
   await ApiService.initialize();
+  // 앱 시작 시 서버 데이터 손실 여부 체크 후 자동 복원
+  _autoRestoreOnStartup();
   runApp(
     MultiProvider(
       providers: [
@@ -23,6 +27,56 @@ void main() async {
       child: const ElevatorManagerApp(),
     ),
   );
+}
+
+/// 앱 시작 시 서버 데이터가 너무 적으면 로컬 백업에서 자동 복원
+Future<void> _autoRestoreOnStartup() async {
+  try {
+    // 로컬 백업 현장 수 확인
+    final backupCount = await _getLocalBackupSitesCount();
+    if (backupCount == 0) {
+      // 로컬 백업 없음 - 서버에서 백업 생성
+      await ApiService.backupToLocal();
+      return;
+    }
+    // 서버 현장 수 확인 (버전 API로 간단하게 체크)
+    final versionData = await ApiService.getVersion();
+    final serverSites = (versionData['sites'] as num?)?.toInt() ?? -1;
+    if (serverSites >= 0 && serverSites < backupCount ~/ 2) {
+      // 서버 데이터가 로컬 백업의 절반 미만이면 복원
+      await ApiService.restoreFromLocal();
+    } else if (serverSites > 0) {
+      // 정상이면 최신 백업 갱신
+      await ApiService.backupToLocal();
+    }
+  } catch (_) {
+    // 서버 연결 실패 시 무시
+  }
+}
+
+Future<int> _getLocalBackupSitesCount() async {
+  try {
+    final backupTime = await ApiService.getLastBackupTime();
+    if (backupTime == null) return 0;
+    // SharedPreferences에서 직접 백업 데이터 읽기
+    final prefs = await _getPrefs();
+    final raw = prefs?.getString('db_backup_v1');
+    if (raw == null) return 0;
+    final data = (jsonDecode(raw) as Map<String, dynamic>);
+    final sites = data['sites'] as List?;
+    return sites?.length ?? 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
+// SharedPreferences 인스턴스 캐시
+Future<SharedPreferences?> _getPrefs() async {
+  try {
+    return await SharedPreferences.getInstance();
+  } catch (_) {
+    return null;
+  }
 }
 
 class ElevatorManagerApp extends StatelessWidget {
