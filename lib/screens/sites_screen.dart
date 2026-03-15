@@ -1797,7 +1797,7 @@ class _ElevatorFormSheetState extends State<ElevatorFormSheet> {
                           Expanded(child: _field(_capCtrl, '정원(명)', number: true)),
                           const SizedBox(width: 8),
                           Expanded(child: DropdownButtonFormField<String>(
-                            initialValue: _status,
+                            value: _status,
                             decoration: const InputDecoration(labelText: '상태'),
                             items: _statuses.map((s) => DropdownMenuItem(
                               value: s,
