@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/site.dart';
 import '../models/inspection.dart';
 import '../models/check.dart';
+import '../models/error_code.dart';
 
 class ApiService {
   static String _baseUrl = 'https://elevator-api-4lac.onrender.com'; // 초기값을 기본 URL로 설정
@@ -587,6 +588,25 @@ class ApiService {
     });
   }
 
+  // ── 관리자: 영구저장 / 영구삭제 ──────────────────────────────
+  static const String _adminSecret = 'DS2024';
+
+  /// 현재 DB 전체를 seed_data.json에 영구저장 (재배포 후 복원용)
+  /// GitHub에도 자동 push (서버에 GITHUB_TOKEN 설정 시)
+  static Future<Map<String, dynamic>> saveSeed() async {
+    return await _post('/api/admin/save-seed', {'secret': _adminSecret});
+  }
+
+  /// 중복 현장 정리 (site_name 기준)
+  static Future<Map<String, dynamic>> dedupSites() async {
+    return await _post('/api/admin/dedup', {'secret': _adminSecret});
+  }
+
+  /// DB 초기화 후 seed_data.json으로 재구성
+  static Future<Map<String, dynamic>> resetFromSeed() async {
+    return await _post('/api/admin/reset-from-seed', {'secret': _adminSecret});
+  }
+
   // ── 사용자 관리 (로컬 캐시 + 서버 동기화) ──────────────────
   static const String _userCacheKey = 'cached_users_v2';
 
@@ -681,6 +701,82 @@ class ApiService {
       final res = await _get('/api/users');
       await _saveUsersToCache(_extractList(res));
     } catch (_) {}
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 에러코드 검색 API
+  // ══════════════════════════════════════════════════════════════
+
+  /// 에러코드 목록 검색 (q=검색어, manufacturer=제조사, severity=심각도)
+  static Future<List<ErrorCode>> getErrorCodes({
+    String? q,
+    String? manufacturer,
+    String? severity,
+    String? elevatorType,
+  }) async {
+    final params = <String, String>{};
+    if (q != null && q.isNotEmpty) params['q'] = q;
+    if (manufacturer != null && manufacturer.isNotEmpty) params['manufacturer'] = manufacturer;
+    if (severity != null && severity.isNotEmpty) params['severity'] = severity;
+    if (elevatorType != null && elevatorType.isNotEmpty && elevatorType != '전체') params['elevator_type'] = elevatorType;
+    final res = await _get('/api/error-codes', params: params);
+    final list = _extractList(res);
+    return list.map((e) => ErrorCode.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// 에러코드 단일 조회 (댓글 포함)
+  static Future<ErrorCode> getErrorCode(int id) async {
+    final res = await _get('/api/error-codes/$id');
+    final data = (res['data'] as Map<String, dynamic>?) ?? {};
+    return ErrorCode.fromJson(data);
+  }
+
+  /// 에러코드 등록 (관리자 전용)
+  static Future<ErrorCode> createErrorCode(Map<String, dynamic> body) async {
+    final res = await _post('/api/error-codes', body);
+    final data = (res['data'] as Map<String, dynamic>?) ?? {};
+    return ErrorCode.fromJson(data);
+  }
+
+  /// 에러코드 수정 (관리자 전용)
+  static Future<ErrorCode> updateErrorCode(int id, Map<String, dynamic> body) async {
+    final res = await _put('/api/error-codes/$id', body);
+    final data = (res['data'] as Map<String, dynamic>?) ?? {};
+    return ErrorCode.fromJson(data);
+  }
+
+  /// 에러코드 삭제 (관리자 전용)
+  static Future<void> deleteErrorCode(int id) async {
+    await _delete('/api/error-codes/$id');
+  }
+
+  /// 제조사 목록 조회
+  static Future<List<String>> getErrorManufacturers() async {
+    final res = await _get('/api/error-manufacturers');
+    final list = _extractList(res);
+    return list.map((e) => e.toString()).toList();
+  }
+
+  /// 댓글 목록 조회
+  static Future<List<ErrorComment>> getErrorComments(int errorId) async {
+    final res = await _get('/api/error-codes/$errorId/comments');
+    final list = _extractList(res);
+    return list.map((e) => ErrorComment.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// 댓글 등록 (관리자 전용)
+  static Future<ErrorComment> addErrorComment(int errorId, String author, String content) async {
+    final res = await _post('/api/error-codes/$errorId/comments', {
+      'author': author,
+      'content': content,
+    });
+    final data = (res['data'] as Map<String, dynamic>?) ?? {};
+    return ErrorComment.fromJson(data);
+  }
+
+  /// 댓글 삭제 (관리자 전용)
+  static Future<void> deleteErrorComment(int errorId, int commentId) async {
+    await _delete('/api/error-codes/$errorId/comments/$commentId');
   }
 
   // ── 외부 URI 헬퍼 ───────────────────────────────────────────

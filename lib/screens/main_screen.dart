@@ -5,6 +5,7 @@ import 'inspections_screen.dart';
 import 'issues_screen.dart';
 import 'monthly_screen.dart';
 import 'quarterly_screen.dart';
+import 'error_search_screen.dart';
 import '../utils/theme.dart';
 
 class MainScreen extends StatefulWidget {
@@ -27,6 +28,7 @@ class _MainScreenState extends State<MainScreen> {
     _NavItem(icon: Icons.warning_amber_outlined, activeIcon: Icons.warning_amber, label: '지적사항'),
     _NavItem(icon: Icons.calendar_month_outlined, activeIcon: Icons.calendar_month, label: '월점검'),
     _NavItem(icon: Icons.memory_outlined, activeIcon: Icons.memory, label: '분기점검'),
+    _NavItem(icon: Icons.search_outlined, activeIcon: Icons.search, label: '에러검색'),
   ];
 
   late final List<Widget> _screens;
@@ -41,6 +43,7 @@ class _MainScreenState extends State<MainScreen> {
       const IssuesScreen(),
       const MonthlyScreen(),
       const QuarterlyScreen(),
+      const ErrorSearchScreen(),
     ];
   }
 
@@ -207,8 +210,11 @@ class _MainScreenState extends State<MainScreen> {
                 _buildSidebarItem(0, isDrawer: isDrawer),
                 const SizedBox(height: 8),
                 _buildMenuSection('관리 메뉴'),
-                for (int i = 1; i < _navItems.length; i++)
+                for (int i = 1; i <= 5; i++)
                   _buildSidebarItem(i, isDrawer: isDrawer),
+                const SizedBox(height: 8),
+                _buildMenuSection('정보'),
+                _buildSidebarItem(6, isDrawer: isDrawer),
               ],
             ),
           ),
@@ -247,6 +253,11 @@ class _MainScreenState extends State<MainScreen> {
   Widget _buildSidebarItem(int index, {bool isDrawer = false}) {
     final item = _navItems[index];
     final isSelected = _selectedIndex == index;
+    // 에러검색 메뉴 (index=6)는 노란색 강조
+    final isErrorSearch = index == 6;
+    final activeColor = isErrorSearch ? const Color(0xFFD97706) : AppTheme.primary;
+    final activeBg = isErrorSearch ? const Color(0xFFFEF3C7) : AppTheme.primaryLight;
+
     return InkWell(
       onTap: () {
         _onTabSelected(index);
@@ -257,7 +268,7 @@ class _MainScreenState extends State<MainScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         margin: const EdgeInsets.only(bottom: 2),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.primaryLight : Colors.transparent,
+          color: isSelected ? activeBg : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
@@ -266,7 +277,7 @@ class _MainScreenState extends State<MainScreen> {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: isSelected ? AppTheme.primary : const Color(0xFFF1F5F9),
+                color: isSelected ? activeColor : const Color(0xFFF1F5F9),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
@@ -281,7 +292,7 @@ class _MainScreenState extends State<MainScreen> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                color: isSelected ? AppTheme.primary : AppTheme.gray700,
+                color: isSelected ? activeColor : AppTheme.gray700,
               ),
             ),
             if (isSelected) ...[
@@ -289,8 +300,8 @@ class _MainScreenState extends State<MainScreen> {
               Container(
                 width: 4,
                 height: 4,
-                decoration: const BoxDecoration(
-                  color: AppTheme.primary,
+                decoration: BoxDecoration(
+                  color: activeColor,
                   shape: BoxShape.circle,
                 ),
               ),

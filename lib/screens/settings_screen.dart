@@ -20,6 +20,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _testing = false;
   bool _testSuccess = false;
   String? _testResult;
+  bool _savingSeed = false;
+  bool _deduping = false;
 
   @override
   void dispose() {
@@ -293,6 +295,132 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             MaterialPageRoute(builder: (_) => const UserManageScreen()),
                           ),
                         ),
+                        const Divider(height: 12),
+                        // ── 영구저장 버튼 ──
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Container(
+                            width: 36, height: 36,
+                            decoration: BoxDecoration(
+                              color: Colors.green.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: _savingSeed
+                              ? const SizedBox(width: 18, height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.green))
+                              : const Icon(Icons.cloud_upload_outlined, color: Colors.green, size: 18),
+                          ),
+                          title: const Text('영구저장 (서버 백업)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                          subtitle: const Text('현재 데이터를 서버에 영구 저장\n재배포 후에도 데이터가 복원됩니다', style: TextStyle(fontSize: 12)),
+                          trailing: _savingSeed
+                            ? const SizedBox(width: 20, height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.chevron_right, color: AppTheme.gray400),
+                          onTap: _savingSeed ? null : () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Row(children: [
+                                  Icon(Icons.cloud_upload_outlined, color: Colors.green),
+                                  SizedBox(width: 8),
+                                  Text('영구저장'),
+                                ]),
+                                content: const Text(
+                                  '현재 DB의 모든 현장·승강기 데이터를\n서버에 영구 저장합니다.\n\n재배포(서버 재시작) 후에도\n데이터가 자동으로 복원됩니다.',
+                                ),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green, foregroundColor: Colors.white),
+                                    onPressed: () => Navigator.pop(ctx, true),
+                                    child: const Text('영구저장'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm != true || !mounted) return;
+                            setState(() => _savingSeed = true);
+                            try {
+                              final res = await ApiService.saveSeed();
+                              if (!mounted) return;
+                              final saved = res['saved'] as Map<String, dynamic>?;
+                              final github = res['github'] ?? 'unknown';
+                              final sites = saved?['sites'] ?? 0;
+                              final elevs = saved?['elevators'] ?? 0;
+                              showDialog(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Row(children: [
+                                    Icon(Icons.check_circle, color: Colors.green),
+                                    SizedBox(width: 8),
+                                    Text('저장 완료'),
+                                  ]),
+                                  content: Text(
+                                    '✅ 현장 $sites개, 승강기 $elevs개 저장 완료\n\n'
+                                    'GitHub: ${github == 'pushed' ? '✅ 자동 push 완료' : github == 'no_token' ? '⚠️ GITHUB_TOKEN 미설정\n(서버에서 환경변수 설정 필요)' : '⚠️ $github'}'
+                                  ),
+                                  actions: [
+                                    ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text('확인')),
+                                  ],
+                                ),
+                              );
+                            } catch (e) {
+                              if (mounted) showToast(context, '저장 실패: $e', isError: true);
+                            } finally {
+                              if (mounted) setState(() => _savingSeed = false);
+                            }
+                          },
+                        ),
+                        const Divider(height: 12),
+                        // ── 중복 정리 버튼 ──
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Container(
+                            width: 36, height: 36,
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.cleaning_services_outlined, color: Colors.orange, size: 18),
+                          ),
+                          title: const Text('중복 데이터 정리', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                          subtitle: const Text('동일한 현장명의 중복 항목 자동 제거', style: TextStyle(fontSize: 12)),
+                          trailing: _deduping
+                            ? const SizedBox(width: 20, height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.chevron_right, color: AppTheme.gray400),
+                          onTap: _deduping ? null : () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('중복 정리'),
+                                content: const Text('동일한 이름의 중복 현장을 제거합니다.\n이 작업은 되돌릴 수 없습니다.'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                                    onPressed: () => Navigator.pop(ctx, true),
+                                    child: const Text('정리'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm != true || !mounted) return;
+                            setState(() => _deduping = true);
+                            try {
+                              final res = await ApiService.dedupSites();
+                              if (!mounted) return;
+                              showToast(context,
+                                '중복 ${res['removed'] ?? 0}개 제거 완료 (현장 ${res['sites'] ?? 0}개)');
+                            } catch (e) {
+                              if (mounted) showToast(context, '실패: $e', isError: true);
+                            } finally {
+                              if (mounted) setState(() => _deduping = false);
+                            }
+                          },
+                        ),
                       ],
                     ),
                   ),
@@ -319,7 +447,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const Divider(height: 20),
                   _infoRow('앱 이름', '승강기 현장 관리 시스템'),
-                  _infoRow('버전', 'v1.0.0'),
+                  _infoRow('버전', 'v2.8.0'),
                   _infoRow('플랫폼', 'Web / Android'),
                   _infoRow('기능', '현장·승강기 관리, 검사·점검 기록'),
                 ],
